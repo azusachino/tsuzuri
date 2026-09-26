@@ -49,6 +49,14 @@ describe.skipIf(!present(KEPANO))("kepano-obsidian", () => {
     expect(notes.every((note) => note.title.trim() !== "")).toBe(true);
   });
 
+  test("keeps Obsidian titles from frontmatter or filenames", async () => {
+    for (const note of await vault.notes()) {
+      const property = note.frontmatter.title;
+      const oldTitle = typeof property === "string" && property.trim() ? property : posix.basename(note.path, ".md");
+      expect(note.title, note.path).toBe(oldTitle);
+    }
+  });
+
   test("resolves links consistently", async () => {
     await expectConsistentLinks(vault);
   });

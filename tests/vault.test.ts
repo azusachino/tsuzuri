@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LineRangeError, NotFoundError, Vault } from "tsuzuri";
 import { describe, expect, test } from "vitest";
-import { FIXTURE } from "./git.ts";
+import { copyVault, FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
 
@@ -17,6 +17,24 @@ describe("scanning", () => {
   test("uses the file name as the title when there is no title property", async () => {
     expect((await vault.find("Home")).title).toBe("Home");
     expect((await vault.find("乌龙茶")).path).toBe("Notes/乌龙茶.md");
+  });
+
+  test("uses a first H1 after frontmatter, with property then filename precedence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tsuzuri-heading-title-"));
+    try {
+      writeFileSync(join(root, "01.md"), "---\ntags: [docs]\n---\n\n# Getting started\n\nDetails.\n");
+      writeFileSync(join(root, "02.md"), "---\ntitle: Explicit title\n---\n\n# Different heading\n");
+      writeFileSync(join(root, "03.md"), "Introduction\n\n# Later heading\n");
+      writeFileSync(join(root, "04.md"), "## Subheading\n");
+      const local = new Vault(root);
+      expect((await local.find("01.md")).title).toBe("Getting started");
+      expect((await local.find("02.md")).title).toBe("Explicit title");
+      expect((await local.find("03.md")).title).toBe("03");
+      expect((await local.find("04.md")).title).toBe("04");
+      expect((await local.find("Getting started")).path).toBe("01.md");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("rejects a missing vault", () => {
@@ -219,6 +237,26 @@ describe("links", () => {
 });
 
 describe("nav", () => {
+  test("uses README.md as the folder index, with index.md taking precedence", async () => {
+    const root = copyVault();
+    try {
+      mkdirSync(join(root, "Guides"));
+      writeFileSync(join(root, "Guides", "README.md"), "# Guides for readers\n\nWelcome.\n");
+      writeFileSync(join(root, "Guides", "Topic.md"), "# A topic\n");
+      const local = new Vault(root);
+      expect((await local.nav()).folders).toContainEqual({ path: "Guides", title: "Guides for readers", notes: 2 });
+      const guides = await local.nav("Guides");
+      expect(guides.index).toMatchObject({ path: "Guides/README.md", title: "Guides for readers" });
+      expect(guides.notes.map((note) => note.path)).toEqual(["Guides/Topic.md"]);
+      writeFileSync(join(root, "Guides", "index.md"), "# Canonical index\n");
+      local.reload();
+      expect((await local.nav("Guides")).index?.path).toBe("Guides/index.md");
+      expect((await local.nav()).folders.find((folder) => folder.path === "Guides")?.title).toBe("Canonical index");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("shows the root folders and notes", async () => {
     const root = await vault.nav();
     expect(root.index).toBeUndefined();

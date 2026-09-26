@@ -740,11 +740,13 @@ export class Vault {
     );
   }
 
-  /** A folder's own `index.md`, its subfolders, and its direct notes: the vault's navigation before any search. */
+  /** A folder's own `index.md` or `README.md`, its subfolders, and its direct notes. */
   async nav(folder = ""): Promise<NavView> {
     const prefix = folderPrefix(folder);
     const notes = (await this.reachable("nav")).filter((note) => note.path.startsWith(prefix));
-    const indexNote = notes.find((note) => note.path === `${prefix}index.md`);
+    const indexNote =
+      notes.find((note) => note.path.toLowerCase() === `${prefix}index.md`.toLowerCase()) ??
+      notes.find((note) => note.path.toLowerCase() === `${prefix}readme.md`.toLowerCase());
     const folders = new Map<string, number>();
     const direct: NoteSummary[] = [];
     for (const note of notes) {
@@ -757,7 +759,7 @@ export class Vault {
         folders.set(child, (folders.get(child) ?? 0) + 1);
       }
     }
-    const titled = new Map(notes.map((note) => [note.path, note.title]));
+    const titled = new Map(notes.map((note) => [note.path.toLowerCase(), note.title]));
     return {
       folder: prefix.replace(/\/$/, ""),
       ...(indexNote
@@ -772,7 +774,10 @@ export class Vault {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([path, count]) => ({
           path,
-          title: titled.get(`${path}/index.md`) ?? posix.basename(path),
+          title:
+            titled.get(`${path}/index.md`.toLowerCase()) ??
+            titled.get(`${path}/readme.md`.toLowerCase()) ??
+            posix.basename(path),
           notes: count,
         })),
       notes: direct.sort((a, b) => a.path.localeCompare(b.path)),
@@ -1125,9 +1130,11 @@ export class Vault {
 function parseNote(path: string, raw: string): Note {
   const { data, body } = splitFrontmatter(raw);
   const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value : undefined);
+  const firstLine = body.split(/\r?\n/).find((line) => line.trim() !== "");
+  const heading = firstLine && /^ {0,3}#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/.exec(firstLine)?.[1]?.trim();
   return {
     path,
-    title: text(data.title) ?? posix.basename(path, ".md"),
+    title: text(data.title) ?? heading ?? posix.basename(path, ".md"),
     type: text(data.type),
     status: text(data.status),
     tags: noteTags(data.tags),

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Markdown folders.** A first H1 gives a note its title when frontmatter has no title, and `README.md` can serve as a folder index. A corpus test guards existing Obsidian titles. ([#95](https://github.com/azusachino/tsuzuri/issues/95))
 - **Vault discovery.** Without an explicit vault or `$TSUZURI_VAULT`, the CLI uses the nearest ancestor holding `tsuzuri.toml`, falling back to cwd. `config` shows the selected root. ([#94](https://github.com/azusachino/tsuzuri/issues/94))
 - **Breaking: note types and smaller settings.** `templates/<type>.md` defines a type; capture uses `templates/capture.md` when present. `[types.<type>]` routes its folder and filename pattern, while `[tags]` and `[titles]` hold vault-wide rules. Removed capture properties, values, timestamp and house-style keys now raise migration errors. ([#92](https://github.com/azusachino/tsuzuri/issues/92), [ADR 0014](docs/decisions/0014-note-types-from-templates.md))
 - **Vault self-description.** `init` previews or writes a starter config and capture template; `types`, `check`, and `config` expose the vault's types, rule failures, and effective settings. Read-only `tsuzuri_types` and `tsuzuri_check` agent tools use the same SDK methods. ([#93](https://github.com/azusachino/tsuzuri/issues/93))

@@ -19,7 +19,7 @@ A vault's extensions add commands of their own, such as the bundled journal's `j
 
 ## output and errors
 
-Text output is for people. With `--json`, stdout is one JSON value, shaped as each command below says. Commands that return notes share one summary: `path`, `title`, `type`, `status`, `tags`, `created`, and `modified`, the optional ones only when set. `--fields a,b` keeps only the named fields, a summary field or any frontmatter key, `null` when absent, and `--format paths` prints one path per line.
+Text output is for people. With `--json`, stdout is one JSON value, shaped as each command below says. Commands that return notes share one summary: `path`, `title`, `type`, `status`, `tags`, `created`, and `modified`, the optional ones only when set. The title comes from frontmatter, then a first H1, then the filename. `--fields a,b` keeps only the named fields, a summary field or any frontmatter key, `null` when absent, and `--format paths` prints one path per line.
 
 With `--json`, a failure prints one line on stderr, `{"error": {"name", "message", ...}}`, with the error's own fields: `suggestions` on `NotFoundError`.
 
@@ -195,7 +195,7 @@ tsuzuri tags --json
 
 `tsuzuri nav [folder]`
 
-A folder's index note and headings, subfolders, and notes.
+A folder's `index.md` or `README.md` note and headings, subfolders, and notes. When both exist, `index.md` is the index.
 
 | Option | Meaning |
 | --- | --- |
