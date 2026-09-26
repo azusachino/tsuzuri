@@ -40,6 +40,8 @@ export interface VaultSettings {
   extensions: string[];
   /** The tables the loaded extensions read, as written, with code options' tables over the file's. */
   tables: Record<string, Record<string, unknown>>;
+  /** Provenance of each core setting, for `config`. */
+  sources: Record<string, string>;
 }
 
 /** Which extension tables a `Vault` accepts: those its loaded extensions read, and any at all when one was skipped. */
@@ -205,6 +207,35 @@ export function resolveSettings(
   for (const [name, route] of Object.entries(code.types ?? {})) {
     types.set(name.toLowerCase(), { ...types.get(name.toLowerCase()), ...route });
   }
+  const source = (key: string, codeValue: unknown, fileValue: unknown) =>
+    [key, codeValue !== undefined ? "options" : fileValue !== undefined ? CONFIG_FILE : "default"] as const;
+  const routeIn = (routes: TsuzuriConfig["types"], name: string) =>
+    Object.entries(routes ?? {}).find(([key]) => key.toLowerCase() === name)?.[1];
+  const sources: Record<string, string> = Object.fromEntries([
+    source("capture.folder", code.capture?.folder, file.capture?.folder),
+    source("capture.filename", code.capture?.filename, file.capture?.filename),
+    source("tags.style", code.tags?.style, file.tags?.style),
+    source("tags.require", code.tags?.require, file.tags?.require),
+    source("tags.reject", code.tags?.reject, file.tags?.reject),
+    source("titles.case", code.titles?.case, file.titles?.case),
+    source("titles.keep", code.titles?.keep, file.titles?.keep),
+    source("templates.folder", code.templates?.folder, file.templates?.folder),
+    source("templates.date_format", code.templates?.date_format, file.templates?.date_format),
+    source("templates.time_format", code.templates?.time_format, file.templates?.time_format),
+    source("extensions", code.extensions, file.extensions),
+    ...[...claims.tables].map((name) => source(name, code[name], file[name])),
+    ...[...types.keys()].flatMap((name) => [
+      source(`types.${name}.folder`, routeIn(code.types, name)?.folder, routeIn(file.types, name)?.folder),
+      source(`types.${name}.filename`, routeIn(code.types, name)?.filename, routeIn(file.types, name)?.filename),
+    ]),
+  ]);
+  for (const [name, route] of types) {
+    if (route.folder === undefined) sources[`types.${name}.folder`] = sources["capture.folder"] ?? "default";
+    if (route.filename === undefined) sources[`types.${name}.filename`] = sources["capture.filename"] ?? "default";
+  }
+  if (code.extensions !== undefined && file.extensions !== undefined) {
+    sources.extensions = `${CONFIG_FILE} + options`;
+  }
 
   return {
     capture: {
@@ -228,6 +259,7 @@ export function resolveSettings(
     ...(template ? { templates: template } : {}),
     extensions: listedExtensions(root, code),
     tables,
+    sources,
   };
 }
 

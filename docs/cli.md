@@ -31,6 +31,36 @@ With `--json`, a failure prints one line on stderr, `{"error": {"name", "message
 
 ## reads
 
+### types
+
+`tsuzuri types`
+
+List each template-backed type with its template path, effective destination folder, and filename pattern. With `--json`, returns objects with `type`, `template`, `folder`, and `filename`.
+
+```sh
+tsuzuri types --json
+```
+
+### check
+
+`tsuzuri check <note>`
+
+Check for frontmatter keys declared by the note type's template and the vault's `[tags]` and `[titles]` rules. A note without a `type` property uses the capture template. With `--json`, returns `path`, `type`, `ok`, `missing`, and `errors`. Exits 1 when a check fails.
+
+```sh
+tsuzuri check "Working memory" --json
+```
+
+### config
+
+`tsuzuri config`
+
+Show the resolved vault root and effective settings, including loaded extension table values. Each setting has a `name`, `value`, and `source` (`options`, `tsuzuri.toml`, `default`, or both when the extension list is merged). With `--json`, returns `root` and `settings`.
+
+```sh
+tsuzuri config --json
+```
+
 ### get
 
 `tsuzuri get <note>`
@@ -275,6 +305,20 @@ tsuzuri help get
 ```
 
 ## writes
+
+### init
+
+`tsuzuri init`
+
+Write a commented starter `tsuzuri.toml` and `templates/capture.md`. Refuses to overwrite either file. `--dry-run` prints both proposed files without writing, even when they already exist. With `--json`, returns `files` (each path and content) and `written`.
+
+| Option | Meaning |
+| --- | --- |
+| `--dry-run` | show the result, a diff for edits, without writing |
+
+```sh
+tsuzuri init --dry-run --json
+```
 
 Every edit takes `--dry-run` for a unified diff, `--if-hash` to refuse a note changed since `get` returned that hash, and `capture` and `new` only create notes.
 

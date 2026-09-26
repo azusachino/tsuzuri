@@ -51,7 +51,7 @@ export function canonicalTag(tag: string): string {
     .join("/");
 }
 
-function validTags(tags: string[], settings: CaptureSettings): string[] {
+export function validTags(tags: string[], settings: CaptureSettings): string[] {
   const spelled = tags.map((tag) => (settings.tagStyle === "kebab" ? canonicalTag(tag) : tag.trim().replace(/^#/, "")));
   const unique = [...new Set(spelled.filter((tag) => tag !== ""))];
   if (settings.requireTags && unique.length === 0) throw new CaptureError("this vault requires at least one tag");

@@ -114,6 +114,22 @@ function writeOf(input: Record<string, unknown>) {
 
 export const TOOLS: ToolDefinition[] = [
   {
+    name: "tsuzuri_types",
+    operation: "types",
+    description: "List template-backed note types, with each template and effective folder and filename route.",
+    inputSchema: schema({}),
+    annotations: READ,
+    run: (vault) => vault.types(),
+  },
+  {
+    name: "tsuzuri_check",
+    operation: "check",
+    description: "Check a note for missing template frontmatter keys and failed title or tag rules.",
+    inputSchema: schema({ note: NOTE }, ["note"]),
+    annotations: READ,
+    run: (vault, input) => vault.check(s(input, "note")),
+  },
+  {
     name: "tsuzuri_get",
     operation: "get",
     description: "Read one note: its summary, frontmatter, body, and hash. lines or around read part of it by line.",

@@ -144,6 +144,30 @@ const SECTION: readonly OptionName[] = ["heading", "create-heading", "level"];
 
 const COMMANDS: readonly CommandSpec[] = [
   {
+    name: "types",
+    operation: "types",
+    args: "",
+    summary: "list template-backed note types and their routes",
+    options: [],
+    example: "tsuzuri types --json",
+  },
+  {
+    name: "check",
+    operation: "check",
+    args: "<note>",
+    summary: "check a note's template keys and title/tag rules; exit 1 when it fails",
+    options: [],
+    example: 'tsuzuri check "Working memory" --json',
+  },
+  {
+    name: "config",
+    operation: "config",
+    args: "",
+    summary: "show effective settings, their sources, and the vault root",
+    options: [],
+    example: "tsuzuri config --json",
+  },
+  {
     name: "get",
     operation: "get",
     args: "<note>",
@@ -255,6 +279,15 @@ const COMMANDS: readonly CommandSpec[] = [
     writes: true,
     options: ["title", "source", "tag", "file", "dry-run"],
     example: 'tsuzuri capture --tag reading --source https://example.com "Read: how agents plan" --dry-run',
+  },
+  {
+    name: "init",
+    operation: "init",
+    args: "",
+    summary: "write starter tsuzuri.toml and templates/capture.md without overwriting",
+    writes: true,
+    options: ["dry-run"],
+    example: "tsuzuri init --dry-run --json",
   },
   {
     name: "new",
@@ -752,6 +785,38 @@ async function main(): Promise<void> {
   };
 
   switch (command) {
+    case "types": {
+      if (args.length > 0) throw new UsageError("types takes no arguments");
+      const types = await vault.types();
+      return emit(types, () =>
+        types.map((item) => `${item.type}\t${item.template}\t${item.folder}\t${item.filename}`).join("\n"),
+      );
+    }
+    case "check": {
+      const result = await vault.check(one(args, "note"));
+      emit(result, () => [result.path, ...result.missing.map((key) => `missing: ${key}`), ...result.errors].join("\n"));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    case "config": {
+      if (args.length > 0) throw new UsageError("config takes no arguments");
+      const result = vault.config();
+      return emit(result, () =>
+        [
+          result.root,
+          ...result.settings.map(({ name, value, source }) => `${name}\t${JSON.stringify(value)}\t${source}`),
+        ].join("\n"),
+      );
+    }
+    case "init": {
+      if (args.length > 0) throw new UsageError("init takes no arguments");
+      const result = vault.init({ dryRun: opts["dry-run"] });
+      return emit(result, () =>
+        result.files
+          .map(({ path, content }) => `${path}${result.written ? "" : " (dry run)"}\n${result.written ? "" : content}`)
+          .join("\n"),
+      );
+    }
     case "get": {
       const around = opts.around === undefined ? undefined : aroundTarget(opts.around);
       if (around?.ref && args.length > 0)

@@ -1,4 +1,13 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -8,9 +17,11 @@ import {
   type CaptureInput,
   type CaptureOptions,
   type CaptureResult,
+  canonicalTag,
   capture,
   captureInputFromMarkdown,
   captureTitle,
+  validTags,
 } from "./capture.ts";
 import { formatDate } from "./dateformat.ts";
 import { ConfigError, TsuzuriError } from "./errors.ts";
@@ -43,6 +54,7 @@ import {
 } from "./settings.ts";
 import { countTags, noteTags, type TagCount, tagMatches } from "./tags.ts";
 import { renderTemplate, templateFor, templateNames } from "./templates.ts";
+import { lowercaseTitle } from "./title.ts";
 import {
   contentHash,
   splice,
@@ -92,6 +104,26 @@ export interface NoteContent extends NoteSummary {
   start?: number;
   end?: number;
   total?: number;
+}
+
+export interface TypeInfo {
+  type: string;
+  template: string;
+  folder: string;
+  filename: string;
+}
+
+export interface CheckResult {
+  path: string;
+  type: string;
+  ok: boolean;
+  missing: string[];
+  errors: string[];
+}
+
+export interface InitResult {
+  files: { path: string; content: string }[];
+  written: boolean;
 }
 
 /**
@@ -745,6 +777,123 @@ export class Vault {
         })),
       notes: direct.sort((a, b) => a.path.localeCompare(b.path)),
     };
+  }
+
+  /** Template-backed types and their effective routes. */
+  async types(): Promise<TypeInfo[]> {
+    this.mask.check("types");
+    const settings = this.settings.templates;
+    if (!settings) return [];
+    const paths = (await this.reachable("types")).map((note) => note.path);
+    return [...new Set(templateNames(paths, settings.folder).map((name) => name.toLowerCase()))].sort().map((type) => ({
+      type,
+      template: templateFor(paths, settings.folder, type) as string,
+      folder: this.settings.types[type]?.folder ?? this.settings.capture.folder,
+      filename: this.settings.types[type]?.filename ?? this.settings.capture.filename,
+    }));
+  }
+
+  /** Check a note against its template's frontmatter keys and vault-wide title/tag rules. */
+  async check(ref: string): Promise<CheckResult> {
+    const note = await this.resolve("check", ref);
+    const type = note.type?.toLowerCase() ?? "capture";
+    const settings = this.settings.templates;
+    const visible = settings ? await this.reachable("check") : [];
+    const paths = visible.map((each) => each.path);
+    const template = settings && templateFor(paths, settings.folder, type);
+    const missing: string[] = [];
+    const errors: string[] = [];
+    if (!template) errors.push(`no template for type "${type}"`);
+    else {
+      const raw = (visible.find((each) => each.path === template) as Note).raw;
+      const expected = splitFrontmatter(raw).data;
+      for (const key of Object.keys(expected)) if (!(key in note.frontmatter)) missing.push(key);
+    }
+    const rules = this.settings.capture;
+    try {
+      validTags(note.tags, rules);
+    } catch (error) {
+      errors.push((error as Error).message);
+    }
+    if (rules.tagStyle === "kebab") {
+      for (const tag of note.tags) if (tag !== canonicalTag(tag)) errors.push(`tag "${tag}" is not kebab-case`);
+    }
+    if (rules.titleStyle === "lowercase" && note.title !== lowercaseTitle(note.title, new Set(rules.titleAllow))) {
+      errors.push(`title "${note.title}" does not follow [titles] case`);
+    }
+    return { path: note.path, type, ok: missing.length === 0 && errors.length === 0, missing, errors };
+  }
+
+  /** Effective core settings and where each value came from. */
+  config(): { root: string; settings: { name: string; value: unknown; source: string }[] } {
+    this.mask.check("config");
+    const { capture, templates, types, extensions, tables, sources } = this.settings;
+    const values: Record<string, unknown> = {
+      "capture.folder": capture.folder,
+      "capture.filename": capture.filename,
+      "tags.style": capture.tagStyle,
+      "tags.require": capture.requireTags,
+      "tags.reject": capture.rejectTags,
+      "titles.case": capture.titleStyle,
+      "titles.keep": capture.titleAllow,
+      "templates.folder": templates?.folder ?? null,
+      "templates.date_format": templates?.dateFormat ?? null,
+      "templates.time_format": templates?.timeFormat ?? null,
+      extensions,
+    };
+    for (const [type, route] of Object.entries(types)) {
+      values[`types.${type}.folder`] = route.folder;
+      values[`types.${type}.filename`] = route.filename;
+    }
+    const addTable = (name: string, value: unknown) => {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const entries = Object.entries(value);
+        if (entries.length === 0) values[name] = {};
+        for (const [key, nested] of entries) addTable(`${name}.${key}`, nested);
+      } else values[name] = value;
+    };
+    for (const [name, table] of Object.entries(tables)) addTable(name, table);
+    return {
+      root: this.root,
+      settings: Object.entries(values).map(([name, value]) => ({
+        name,
+        value,
+        source: sources[name] ?? sources[name.split(".")[0] as string] ?? "default",
+      })),
+    };
+  }
+
+  /** Prepare or write a starter config and capture template, refusing any existing target. */
+  init(options: { dryRun?: boolean } = {}): InitResult {
+    const files = [
+      {
+        path: CONFIG_FILE,
+        content:
+          '# tsuzuri vault settings\n# [capture]\n# folder = "Inbox"\n# filename = "{{title}}"\n\n# [tags]\n# style = "as-written"\n# require = false\n\n# [titles]\n# case = "as-written"\n\n[templates]\nfolder = "templates"\n',
+      },
+      {
+        path: "templates/capture.md",
+        content: '---\ntitle: "{{title}}"\ncreated: "{{date:YYYY-MM-DD}}"\ntags:\n---\n\n{{title}}\n',
+      },
+    ];
+    this.mask.check(
+      "init",
+      files.map((file) => file.path),
+    );
+    if (!options.dryRun) {
+      if (lstatSync(join(this.root, "templates"), { throwIfNoEntry: false })?.isSymbolicLink()) {
+        throw new WriteConflictError("templates is a symbolic link");
+      }
+      for (const file of files) {
+        if (lstatSync(join(this.root, file.path), { throwIfNoEntry: false })) {
+          throw new WriteConflictError(`${file.path} already exists`);
+        }
+      }
+      mkdirSync(join(this.root, "templates"), { recursive: true });
+      for (const file of files) writeFileSync(join(this.root, file.path), file.content, { flag: "wx" });
+      this.reload();
+    }
+    return { files, written: !options.dryRun };
   }
 
   /**

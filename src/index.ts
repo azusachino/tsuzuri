@@ -32,10 +32,12 @@ export type {
 export { UnsupportedError } from "./settings.ts";
 export type { TagCount } from "./tags.ts";
 export type {
+  CheckResult,
   DeleteResult,
   Filter,
   GetOptions,
   Heading,
+  InitResult,
   ListOptions,
   MoveResult,
   NavEntry,
@@ -49,6 +51,7 @@ export type {
   SectionWriteOptions,
   SkippedExtension,
   Suggestion,
+  TypeInfo,
   VaultOptions,
 } from "./vault.ts";
 export { LineRangeError, NotFoundError, SORT_KEYS, Vault } from "./vault.ts";
