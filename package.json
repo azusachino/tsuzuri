@@ -1,6 +1,6 @@
 {
   "name": "tsuzuri",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "An SDK and CLI for reading and capturing into an Obsidian-compatible Markdown vault",
   "type": "module",
   "module": "./dist/lib/index.js",
