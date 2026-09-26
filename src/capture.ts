@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { stringify } from "yaml";
-import { formatDate } from "./dateformat.ts";
 import { TsuzuriError } from "./errors.ts";
 import { splitFrontmatter, stringList, yamlScalar } from "./frontmatter.ts";
 import type { CaptureSettings } from "./settings.ts";
+import { renderTemplate, slugTitle } from "./templates.ts";
 import { lowercaseTitle } from "./title.ts";
 
 export interface CaptureInput {
@@ -15,8 +15,8 @@ export interface CaptureInput {
   tags?: string[];
   source?: string;
   /**
-   * Other frontmatter to keep, written after the vault's declared properties. Declared keys are always filled by capture,
-   * and a `title`, `tags`, or `source` key here is written from the capture's own title, tags, or source.
+   * Frontmatter imported from a Markdown file or template. A `title`, `tags`, or `source` key is filled from the
+   * capture's own title, tags, or source.
    */
   properties?: Record<string, unknown>;
   now?: Date;
@@ -34,7 +34,6 @@ export interface CaptureResult {
 }
 
 const TITLE_LIMIT = 80;
-const SLUG_LIMIT = 60;
 const FILENAME_LIMIT = 120;
 // Characters Obsidian refuses in a file name, or that break a wikilink to it.
 const UNSAFE_FILENAME = /[*"\\/<>:|?#^[\]\p{Cc}]/gu;
@@ -71,7 +70,7 @@ function validTags(tags: string[], settings: CaptureSettings): string[] {
   return unique;
 }
 
-function titleFrom(input: CaptureInput, settings: CaptureSettings): string {
+export function captureTitle(input: CaptureInput, settings: CaptureSettings): string {
   const explicit = input.title?.trim();
   const firstLine = input.text
     .split("\n")
@@ -93,7 +92,7 @@ function fallbackStem(now: Date): string {
 }
 
 /** The file name stem for a title: the title itself as Obsidian names files, or an ASCII kebab-case slug. */
-export function fileStem(title: string, filename: CaptureSettings["filename"], now: Date): string {
+export function fileStem(title: string, filename: "title" | "slug", now: Date): string {
   if (filename === "title") {
     const stem = title
       .replace(UNSAFE_FILENAME, " ")
@@ -103,52 +102,41 @@ export function fileStem(title: string, filename: CaptureSettings["filename"], n
       .slice(0, FILENAME_LIMIT);
     return stem === "" ? fallbackStem(now) : stem;
   }
-  const slug = title
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, SLUG_LIMIT)
-    .replace(/-+$/, "");
-  return slug.length >= 3 ? slug : fallbackStem(now);
+  return slugTitle(title, now);
 }
 
 export function renderCapture(input: CaptureInput, settings: CaptureSettings): { title: string; content: string } {
-  const now = input.now ?? new Date();
-  const title = titleFrom(input, settings);
+  const title = captureTitle(input, settings);
   const tags = validTags(input.tags ?? [], settings);
   const source = input.source?.trim();
 
   const lines: string[] = [];
-  // Capture fills these from its own inputs wherever the key comes from: the settings or the note's own properties.
+  // Capture fills these from its own inputs wherever the key comes from: a template or an imported note.
   const own = (key: string): boolean => {
     if (key === "title") lines.push(`title: ${yamlScalar(title)}`);
     else if (key === "tags") {
       if (tags.length > 0) lines.push("tags:", ...tags.map((tag) => `  - ${yamlScalar(tag)}`));
+      else if (key in (input.properties ?? {})) lines.push("tags:");
     } else if (key === "source") {
       if (source) lines.push(`source: ${yamlScalar(source)}`);
+      else if (key in (input.properties ?? {})) lines.push("source:");
     } else return false;
     return true;
   };
-  for (const key of settings.properties) {
-    if (own(key)) continue;
-    if (key === "created" || key === "modified")
-      lines.push(`${key}: ${yamlScalar(formatDate(now, settings.timestampFormat))}`);
-    else if (settings.values[key] !== undefined) lines.push(`${key}: ${yamlScalar(settings.values[key] as string)}`);
-  }
-  const declared = new Set(settings.properties);
+  const declared = new Set(Object.keys(input.properties ?? {}));
   for (const [key, value] of Object.entries(input.properties ?? {})) {
-    if (declared.has(key) || value === undefined || own(key)) continue;
+    if (value === undefined || own(key)) continue;
     // An empty property is kept as Obsidian writes it, `key:`, such as a template's blank to fill in later.
     lines.push(value === null ? `${key}:` : stringify({ [key]: value }, { lineWidth: 0 }).trimEnd());
   }
+  if (!declared.has("tags") && tags.length > 0) own("tags");
+  if (!declared.has("source") && source) own("source");
   const text = input.text.trim();
   const block = lines.length > 0 ? `---\n${lines.join("\n")}\n---\n` : "";
   const content = text === "" ? block : `${block}${block ? "\n" : ""}${text}\n`;
 
   const { data } = splitFrontmatter(content);
-  const wroteTags = declared.has("tags") || "tags" in (input.properties ?? {});
+  const wroteTags = declared.has("tags") || tags.length > 0;
   if (
     ("title" in data && data.title !== title) ||
     stringList(data.tags).join("\n") !== (wroteTags ? tags : []).join("\n")
@@ -158,7 +146,7 @@ export function renderCapture(input: CaptureInput, settings: CaptureSettings): {
   return { title, content };
 }
 
-function freePath(root: string, folder: string, stem: string, filename: CaptureSettings["filename"]): string {
+function freePath(root: string, folder: string, stem: string, filename: "title" | "slug"): string {
   const separator = filename === "title" ? " " : "-";
   for (let n = 1; ; n++) {
     const path = posix.join(folder, `${n === 1 ? stem : `${stem}${separator}${n}`}.md`);
@@ -175,8 +163,16 @@ export async function capture(
 ): Promise<CaptureResult> {
   const now = input.now ?? new Date();
   const { title, content } = renderCapture({ ...input, now }, settings);
-  const stem = fileStem(title, settings.filename, now);
-  const path = freePath(root, settings.folder, stem, settings.filename);
+  const pattern =
+    settings.filename === "title" ? "{{title}}" : settings.filename === "slug" ? "{{slug}}" : settings.filename;
+  const rendered = renderTemplate(pattern, title, now, {
+    folder: "",
+    dateFormat: "YYYY-MM-DD",
+    timeFormat: "HH:mm",
+    source: "default",
+  }).replace(/\.md$/i, "");
+  const stem = fileStem(rendered, "title", now);
+  const path = freePath(root, settings.folder, stem, pattern.includes("{{slug}}") ? "slug" : "title");
   if (options.dryRun) return { path, content, written: false };
 
   mkdirSync(dirname(join(root, path)), { recursive: true });

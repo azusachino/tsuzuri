@@ -10,6 +10,7 @@ import {
   type CaptureResult,
   capture,
   captureInputFromMarkdown,
+  captureTitle,
 } from "./capture.ts";
 import { formatDate } from "./dateformat.ts";
 import { ConfigError, TsuzuriError } from "./errors.ts";
@@ -771,23 +772,58 @@ export class Vault {
       );
     }
     const now = options.now ?? new Date();
+    const styledTitle = captureTitle({ text: title, title }, this.settings.capture);
     const template = (notes.find((note) => note.path === path) as Note).raw;
-    const input = captureInputFromMarkdown(renderTemplate(template, title, now, settings), path);
+    const input = captureInputFromMarkdown(renderTemplate(template, styledTitle, now, settings), path);
     const tags = [...(input.tags ?? []), ...(options.tags ?? [])];
-    return this.captureAs("create", { ...input, title, tags, now }, options);
+    return this.captureAs("create", { ...input, title: styledTitle, tags, now }, options, type);
   }
 
   async capture(input: CaptureInput, options: CaptureOptions = {}): Promise<CaptureResult> {
-    return this.captureAs("capture", input, options);
+    const settings = this.settings.templates;
+    const { notes } = await this.load();
+    const path =
+      settings &&
+      templateFor(
+        notes.map((note) => note.path),
+        settings.folder,
+        "capture",
+      );
+    if (!path || !settings) return this.captureAs("capture", input, options, "capture");
+    const now = input.now ?? new Date();
+    const title = captureTitle(input, this.settings.capture);
+    const template = (notes.find((note) => note.path === path) as Note).raw;
+    const base = captureInputFromMarkdown(renderTemplate(template, title, now, settings), path);
+    return this.captureAs(
+      "capture",
+      {
+        ...base,
+        ...input,
+        title,
+        tags: [...(base.tags ?? []), ...(input.tags ?? [])],
+        source: input.source ?? base.source,
+        properties: { ...base.properties, ...input.properties },
+        text: [base.text.trim(), input.text.trim()].filter(Boolean).join("\n\n"),
+        now,
+      },
+      options,
+      "capture",
+    );
   }
 
   /** Capture under `op`: the note's path is planned first, and written only when the mask reaches it. */
-  private async captureAs(op: OperationName, input: CaptureInput, options: CaptureOptions): Promise<CaptureResult> {
+  private async captureAs(
+    op: OperationName,
+    input: CaptureInput,
+    options: CaptureOptions,
+    type?: string,
+  ): Promise<CaptureResult> {
     this.mask.check(op);
     const planned = { ...input, now: input.now ?? new Date() };
-    const plan = await capture(this.root, planned, this.settings.capture, { dryRun: true });
+    const settings = { ...this.settings.capture, ...(type ? this.settings.types[type.toLowerCase()] : undefined) };
+    const plan = await capture(this.root, planned, settings, { dryRun: true });
     this.mask.check(op, [plan.path]);
-    return options.dryRun ? plan : this.recorded(capture(this.root, planned, this.settings.capture, options));
+    return options.dryRun ? plan : this.recorded(capture(this.root, planned, settings, options));
   }
 
   /**

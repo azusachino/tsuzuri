@@ -113,31 +113,38 @@ tsuzuri assumes no folder layout or house style. Each setting is resolved in thi
 | Setting | `tsuzuri.toml` | Default |
 | --- | --- | --- |
 | capture folder | `[capture] folder` | the vault root |
-| template folder | `[templates] folder` | `UnsupportedError` for `new` |
+| capture filename | `[capture] filename` | `{{title}}` |
+| type route | `[types.<type>] folder` and `filename` | the capture route |
+| template folder | `[templates] folder` | `templates/` when present |
+| tag rules | `[tags] style`, `require`, and `reject` | Obsidian tags, optional |
+| title rules | `[titles] case` and `keep` | as written |
 
 tsuzuri reads nothing in `.obsidian/`: an Obsidian-compatible vault needs no Obsidian configuration, and a vault edited in Obsidian writes its conventions in `tsuzuri.toml` once ([ADR 0011](docs/decisions/0011-settings-from-neiro-toml-only.md)).
 
 An unknown key, or a value of the wrong type or choice, in `tsuzuri.toml` or code options raises `ConfigError` naming it. A vault's own conventions, such as daily and weekly notes, come from [extensions](docs/extensions.md) it lists: `extensions = ["tsuzuri:journal"]` enables the bundled journal and its `[journal.<period>]` tables.
 
-A `tsuzuri.toml` declaring a stricter house style:
+A `tsuzuri.toml` routing types and declaring a stricter house style:
 
 ```toml
 [capture]
 folder = "inbox"
-filename = "slug"                  # ASCII kebab-case; the default "title" names files as Obsidian does
-properties = ["title", "created", "modified", "status", "tags", "source"]
-timestamp_format = "YYYY-MM-DD HH:mm"  # the default "YYYY-MM-DD" is the format of Obsidian's Date property
-title_style = "lowercase"          # lowercase title words, except those in the allowlist
-title_allowlist = "casing.toml"    # every string in this file's arrays is kept as written
-tag_style = "kebab"                # canonical lowercase kebab-case; the default keeps tags as written
-require_tags = true
-reject_tags = ["todo"]
+filename = "{{slug}}"
 
-[capture.values]
-status = "inbox"
+[types.book]
+folder = "Books"
+filename = "{{slug}}-{{date:YYYY}}"
+
+[titles]
+case = "lowercase"
+keep = ["OpenAI", "iPhone"]
+
+[tags]
+style = "kebab"
+require = true
+reject = ["todo"]
 
 [templates]
-folder = "templates"               # without it, `new` raises UnsupportedError
+folder = "templates"
 ```
 
 Paths listed in the vault's `.gitmodules`, dot folders such as `.obsidian` and `.trash`, `node_modules`, and anything the vault root's `.gitignore` ignores are never scanned, as ripgrep skips them.
@@ -152,8 +159,8 @@ tsuzuri capture --file tmp/draft.md --tag reading     # a whole Markdown file, f
 ```
 
 - The title is the first line of the text unless `--title` is given, with Markdown markers removed. With `--file`, the file's `title` property comes first, then its first heading, then its file name, and its `tags`, `source`, and other properties carry over; `--tag` adds to its tags.
-- By default the frontmatter holds only the tags and source, when given, and a note without either has no frontmatter. `properties` and `[capture.values]` in `tsuzuri.toml` declare more, and capture always fills the properties the vault declares.
-- By default the file is named after the title, without the characters Obsidian refuses in file names, and a taken name gets a number, as in `Idea 2.md`. The `slug` style uses an ASCII kebab-case stem with a `-2` suffix, falling back to `capture-YYYYMMDD-HHmm` for a title with no ASCII letters.
+- When `templates/capture.md` exists, capture fills its `{{title}}`, `{{date}}`, `{{time}}`, and `{{slug}}` placeholders, keeps its frontmatter and body, and appends the captured text. Otherwise it writes the text with tags and source when given. `new <type>` uses `templates/<type>.md`; `[templates] folder` may choose another folder.
+- By default the file is named after the title, without characters Obsidian refuses; a taken name gets a number, as in `Idea 2.md`. `{{slug}}` uses an ASCII kebab-case stem with a `-2` suffix, falling back to `capture-YYYYMMDD-HHmm` for a title with no ASCII letters. `[types.<type>]` can route each type to its own folder and filename pattern.
 - Tags use Obsidian's tag syntax: letters, numbers, `_`, `-`, and `/` for nesting, with at least one non-digit.
 - `--dry-run` prints the note without writing.
 

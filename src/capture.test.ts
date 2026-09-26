@@ -10,16 +10,9 @@ const NOW = new Date(2026, 8, 24, 19, 5);
 
 /** A vault that declares a strict house style, the way a vault's own tsuzuri.toml would. */
 const STRICT: TsuzuriConfig = {
-  capture: {
-    folder: "queue",
-    filename: "slug",
-    properties: ["title", "created", "modified", "kind", "tags", "source"],
-    values: { kind: "capture" },
-    title_style: "lowercase",
-    tag_style: "kebab",
-    require_tags: true,
-    reject_tags: ["todo"],
-  },
+  capture: { folder: "queue", filename: "{{slug}}" },
+  titles: { case: "lowercase" },
+  tags: { style: "kebab", require: true, reject: ["todo"] },
 };
 
 /** An empty folder, so settings resolve from code options and neutral defaults alone. */
@@ -29,7 +22,7 @@ const strict = resolveSettings(empty(), STRICT).capture;
 
 describe("default capture settings", () => {
   test("name files after the title, record only tags, and write at the vault root", () => {
-    expect(defaults).toMatchObject({ folder: "", filename: "title", properties: ["tags", "source"] });
+    expect(defaults).toMatchObject({ folder: "", filename: "{{title}}" });
     const { content } = renderCapture({ text: "Body line", title: "A Title", tags: ["learning"], now: NOW }, defaults);
     expect(content).toBe("---\ntags:\n  - learning\n---\n\nBody line\n");
   });
@@ -59,8 +52,17 @@ describe("default capture settings", () => {
 });
 
 describe("configured capture settings", () => {
-  test("write the declared properties in order", () => {
-    const { content } = renderCapture({ text: "Body", title: "An Idea", tags: ["Agent_Harness"], now: NOW }, strict);
+  test("write template properties in order", () => {
+    const { content } = renderCapture(
+      {
+        text: "Body",
+        title: "An Idea",
+        tags: ["Agent_Harness"],
+        now: NOW,
+        properties: { title: "An Idea", created: "2026-09-24", modified: "2026-09-24", kind: "capture", tags: [] },
+      },
+      strict,
+    );
     expect(content).toBe(
       [
         "---",
@@ -80,7 +82,7 @@ describe("configured capture settings", () => {
 
   test("quote values YAML would misread, and they round-trip", () => {
     const { content } = renderCapture(
-      { text: "x", title: "read: this", tags: ["x"], source: "a #b", now: NOW },
+      { text: "x", title: "read: this", tags: ["x"], source: "a #b", properties: { title: "read: this" }, now: NOW },
       strict,
     );
     expect(content).toContain('title: "read: this"');
@@ -110,14 +112,6 @@ describe("configured capture settings", () => {
     expect(() => renderCapture({ text: "x", tags: ["todo"] }, strict)).toThrow('does not allow the tag "todo"');
     expect(() => renderCapture({ text: "x", tags: ["c++"] }, strict)).toThrow("not a valid tag");
     expect(() => renderCapture({ text: "  ", tags: ["x"] }, strict)).toThrow(CaptureError);
-  });
-
-  test("write created and modified in the configured timestamp format", () => {
-    const timed = resolveSettings(empty(), {
-      capture: { ...STRICT.capture, timestamp_format: "YYYY-MM-DD HH:mm" },
-    }).capture;
-    const { content } = renderCapture({ text: "Body", title: "An Idea", tags: ["x"], now: NOW }, timed);
-    expect(content).toContain("created: 2026-09-24 19:05\nmodified: 2026-09-24 19:05\n");
   });
 });
 
@@ -156,10 +150,10 @@ describe("captureInputFromMarkdown", () => {
     expect(captureInputFromMarkdown("plain text\n").title).toBeUndefined();
   });
 
-  test("keeps the file's other properties after the declared ones, never duplicating a declared key", () => {
+  test("keeps the file's properties in order without duplicating a key", () => {
     const { content } = renderCapture({ ...captureInputFromMarkdown(draft, "draft.md"), now: NOW }, strict);
     const { data } = splitFrontmatter(content);
-    expect(data).toMatchObject({ title: "a drafted idea", kind: "capture", author: "Someone", rating: 4 });
+    expect(data).toMatchObject({ title: "a drafted idea", kind: "draft", author: "Someone", rating: 4 });
     expect(content.match(/^kind:/gm)).toHaveLength(1);
     expect(content.indexOf("author:")).toBeGreaterThan(content.indexOf("source:"));
   });

@@ -41,12 +41,8 @@ try {
   }
 
   writeFileSync(
-    join(tempRoot, "casing.toml"),
-    '[allow]\nwords = ["OpenAI", "iPhone"]\nmore = { names = ["GitHub"] }\n',
-  );
-  writeFileSync(
     join(tempRoot, "tsuzuri.toml"),
-    '[capture]\nfolder = "Inbox"\nproperties = ["title", "created", "tags"]\nvalues = { kind = "capture" }\ntitle_allowlist = "casing.toml"\nrequire_tags = true\n[templates]\nfolder = "Templates"\ndate_format = "GGGG-[W]WW"\n',
+    '[capture]\nfolder = "Inbox"\n[titles]\ncase = "lowercase"\nkeep = ["OpenAI", "iPhone", "GitHub"]\n[tags]\nrequire = true\n[templates]\nfolder = "Templates"\ndate_format = "GGGG-[W]WW"\n',
   );
   parseToml.force("Bun.TOML");
   const bunSettings = new Vault(tempRoot).settings;

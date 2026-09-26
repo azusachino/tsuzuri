@@ -64,18 +64,18 @@ describe("every provider returns the same result", () => {
     }
   });
 
-  test("parse TOML, for tsuzuri.toml and its title allowlist", async () => {
+  test("parse TOML, for tsuzuri.toml and its title keep list", async () => {
     const root = mkdtempSync(join(tmpdir(), "tsuzuri-toml-"));
-    writeFileSync(join(root, "casing.toml"), '[allow]\nwords = ["OpenAI", "iPhone"]\nmore = { names = ["GitHub"] }\n');
     writeFileSync(
       join(root, "tsuzuri.toml"),
       [
         "[capture]",
         'folder = "Inbox"',
-        'properties = ["title", "created", "tags"]',
-        'values = { kind = "capture" }',
-        'title_allowlist = "casing.toml"',
-        "require_tags = true",
+        "[titles]",
+        'case = "lowercase"',
+        'keep = ["OpenAI", "iPhone", "GitHub"]',
+        "[tags]",
+        "require = true",
         "[templates]",
         'folder = "Templates"',
         'date_format = "GGGG-[W]WW"',

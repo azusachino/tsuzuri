@@ -41,7 +41,7 @@ Reach for the narrowest verb:
 | move or rename a note, keeping its links | `move <note> <path>`, after `--dry-run` shows every note it rewrites |
 | delete a note, only when asked to | `delete <note>`, after `backlinks <note>`; it goes to `.trash` and its links break |
 
-`capture`, `new`, and `write` only create files, so they need no hash. For every other write:
+`capture` uses `templates/capture.md` when present; `new` uses `templates/<type>.md`. A vault may route each type in `tsuzuri.toml`. `capture`, `new`, and `write` only create files, so they need no hash. For every other write:
 
 1. `get <note> --json` and keep its `hash`.
 2. Run the write with `--dry-run --if-hash <hash>` and check the diff changes only what you meant.

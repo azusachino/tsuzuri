@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPERATIONS, TsuzuriError, Vault } from "tsuzuri";
 import { agentTools, TOOLS, ToolInputError, validateInput } from "tsuzuri/tools";
@@ -77,6 +77,28 @@ describe("tool definitions", () => {
     expect(await run("tsuzuri_write", { path: "Notes/By tool.md", content: "x\n" })).toMatchObject({ created: true });
     const moved = await run("tsuzuri_move", { note: "Working memory", to: "Topics/Short-term memory.md" });
     expect(moved).toMatchObject({ written: true, rewritten: [{ path: "Topics/Cognitive load.md" }] });
+  });
+
+  test("capture and new tools use the vault's templates and type routes", async () => {
+    const root = copyVault();
+    writeFileSync(
+      join(root, "Templates", "capture.md"),
+      "---\nkind: capture\nsource: https://example.com/template\n---\n\n# {{title}}\n",
+    );
+    const vault = new Vault(root, {
+      config: { types: { capture: { folder: "Queue", filename: "{{slug}}" }, book: { folder: "Books" } } },
+    });
+    const captured = (await call(vault, "tsuzuri_capture", { text: "An idea", dryRun: true })) as {
+      path: string;
+      content: string;
+    };
+    expect(captured.path).toBe("Queue/an-idea.md");
+    expect(captured.content).toContain("kind: capture");
+    expect(captured.content).toContain("source: https://example.com/template");
+    const created = (await call(vault, "tsuzuri_new", { type: "book", title: "Dune", dryRun: true })) as {
+      path: string;
+    };
+    expect(created.path).toBe("Books/Dune.md");
   });
 });
 

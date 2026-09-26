@@ -282,7 +282,7 @@ Every edit takes `--dry-run` for a unified diff, `--if-hash` to refuse a note ch
 
 `tsuzuri capture [text...]`
 
-Create a new note in the capture folder from text, --file, or stdin; never edits a note.
+Create a new note from text, --file, or stdin; never edits a note. A `templates/capture.md` template supplies frontmatter and headings when present. The capture route comes from `[capture]` or `[types.capture]`.
 
 | Option | Meaning |
 | --- | --- |
@@ -302,7 +302,7 @@ tsuzuri capture --tag reading --source https://example.com "Read: how agents pla
 
 `tsuzuri new <type> <title...>`
 
-Create a note from the vault's template for type, placed as capture places it.
+Create a note from `templates/<type>.md`, or the configured template folder. `[types.<type>]` may route it to a folder and filename pattern; otherwise it uses the capture route.
 
 | Option | Meaning |
 | --- | --- |
