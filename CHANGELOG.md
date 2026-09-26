@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Vault discovery.** Without an explicit vault or `$TSUZURI_VAULT`, the CLI uses the nearest ancestor holding `tsuzuri.toml`, falling back to cwd. `config` shows the selected root. ([#94](https://github.com/azusachino/tsuzuri/issues/94))
 - **Breaking: note types and smaller settings.** `templates/<type>.md` defines a type; capture uses `templates/capture.md` when present. `[types.<type>]` routes its folder and filename pattern, while `[tags]` and `[titles]` hold vault-wide rules. Removed capture properties, values, timestamp and house-style keys now raise migration errors. ([#92](https://github.com/azusachino/tsuzuri/issues/92), [ADR 0014](docs/decisions/0014-note-types-from-templates.md))
 - **Vault self-description.** `init` previews or writes a starter config and capture template; `types`, `check`, and `config` expose the vault's types, rule failures, and effective settings. Read-only `tsuzuri_types` and `tsuzuri_check` agent tools use the same SDK methods. ([#93](https://github.com/azusachino/tsuzuri/issues/93))
 - **Node-first development:** `make check` runs Vitest on Node 22 or later, CI verifies Node 22 and 24 without Bun, and `make pack` uses npm. Bun remains an optional runtime parity check. The package now supports Node 22, and its built CLI and declarations are checked as a consumer would use them. ([#91](https://github.com/azusachino/tsuzuri/issues/91))

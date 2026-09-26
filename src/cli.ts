@@ -66,7 +66,7 @@ const OPTIONS = {
   vault: {
     type: "string",
     value: "<dir>",
-    summary: "vault root (default: $TSUZURI_VAULT, then the current directory)",
+    summary: "vault root (default: $TSUZURI_VAULT, then nearest ancestor with tsuzuri.toml, then cwd)",
   },
   json: { type: "boolean", summary: "machine-readable output and errors, the same as --format json" },
   format: { type: "string", value: "<text|json|paths>", summary: "paths prints one path per line, for xargs and fzf" },
@@ -593,7 +593,17 @@ function trustedByUser(root: string): boolean {
 
 /** The vault with the extensions it lists, saying on stderr which it skipped and how to load them. */
 async function openVault(dir: string | undefined, trust: boolean): Promise<Vault> {
-  const root = resolve(dir ?? process.env.TSUZURI_VAULT ?? process.cwd());
+  const explicit = dir ?? process.env.TSUZURI_VAULT;
+  let root = resolve(explicit || process.cwd());
+  if (!explicit) {
+    for (let at = root; ; at = resolve(at, "..")) {
+      if (existsSync(join(at, "tsuzuri.toml"))) {
+        root = at;
+        break;
+      }
+      if (at === resolve(at, "..")) break;
+    }
+  }
   const vault = await Vault.open(root, { trust: trust || trustedByUser(root) });
   if (vault.skipped.length > 0) {
     const skipped = vault.skipped.map((skip) => `${skip.extension} (${skip.reason})`).join(", ");

@@ -36,7 +36,7 @@ One package holds the SDK, the agent tools at `tsuzuri/tools`, and both commands
 
 ```sh
 npx tsuzuri --version                 # or bunx tsuzuri; or npm install -g tsuzuri for a `tsuzuri` command
-export TSUZURI_VAULT=~/notes          # or pass --vault <dir>; the default is the current directory
+export TSUZURI_VAULT=~/notes          # or pass --vault <dir>; otherwise find tsuzuri.toml upward from cwd
 
 tsuzuri nav                           # the vault's top folders and notes
 tsuzuri search cognitive load --limit 5
