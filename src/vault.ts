@@ -1,6 +1,6 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, join, posix, resolve } from "node:path";
+import { basename, dirname, join, posix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import ignore from "ignore";
 import { parseDocument, stringify } from "yaml";
@@ -583,7 +583,7 @@ export class Vault {
       if (
         existing.dev !== original.dev ||
         existing.ino !== original.ino ||
-        realpathSync(join(this.root, target)) !== realpathSync(join(this.root, note.path))
+        readdirSync(join(this.root, dirname(target))).includes(basename(target))
       ) {
         throw new WriteConflictError(`${target} exists; move does not overwrite`);
       }

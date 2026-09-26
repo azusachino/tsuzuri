@@ -30,7 +30,7 @@ npm install tsuzuri       # the SDK, in a project; or bun add tsuzuri
 npx tsuzuri --help        # or bunx tsuzuri, without installing
 ```
 
-One package holds the SDK, the agent tools at `tsuzuri/tools`, and both commands. It needs Node 24 or later, or Bun 1.4 or later.
+One package holds the SDK, the agent tools at `tsuzuri/tools`, and both commands. It needs Node 22 or later, or Bun 1.4 or later.
 
 ## Quick start
 
@@ -232,14 +232,14 @@ npx skills add azusachino/tsuzuri
 
 ## Development
 
-Bun, Node, rumdl, and typos are pinned in `.mise.toml`; run `mise install`, then:
+Node, Bun, rumdl, and typos are pinned in `.mise.toml`. Install the Node toolchain with `mise install node rumdl typos`, then:
 
 ```sh
-make install    # dependencies from bun.lock, plus the kepano-obsidian test vault
+make install    # dependencies from package-lock.json, plus the kepano-obsidian test vault
 make check      # Biome lint and format, tsc, rumdl, typos, and tests
 make validate   # check, then build the CLI and run it against the fixture vault
-make build      # compile the CLI into one binary, and the SDK into dist/lib
-make node-smoke # run the read commands on Node, and import the built SDK there, comparing with Bun
+make build      # compile the CLI and SDK into dist/lib
+make node-smoke # compare Node and Bun; requires optional Bun
 make pack       # pack the package into dist/pack, the tarball npm and a release carry
 make publish    # publish that tarball to npm, after a release is tagged (see CONTRIBUTING.md)
 make corpus     # fetch the opt-in obsidian-help vault (about 635 MB), which the tests then include

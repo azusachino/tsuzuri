@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import {
   CaptureError,
   ConfigError,
@@ -11,6 +10,7 @@ import {
   UnsupportedError,
   WriteConflictError,
 } from "tsuzuri";
+import { expect, test } from "vitest";
 
 test("every error tsuzuri raises is a TsuzuriError named after its class", () => {
   const classes = [

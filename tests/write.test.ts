@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Vault, WriteConflictError } from "tsuzuri";
+import { expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
 const NOTE = "Topics/Cognitive load.md";

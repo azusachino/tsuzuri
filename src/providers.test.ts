@@ -3,23 +3,24 @@
  * provider in turn, which only tsuzuri's own code can do, over real notes: the test package's fixture vault and
  * corpora, read by path because no other package has the vaults to check against.
  */
-import { describe, expect, test } from "bun:test";
+
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import type { Chain } from "./chain.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { parseToml, parseYaml } from "./providers.ts";
 import { Vault } from "./vault.ts";
 
-const VAULTS = join(import.meta.dir, "..", "tests");
+const VAULTS = join(import.meta.dirname, "..", "tests");
 const FIXTURE = join(VAULTS, "fixtures", "vault");
 
 /** Run `read` with each provider of `chain` forced in turn, and return every output by provider name. */
 async function eachProvider<T, R>(chain: Chain<T>, read: () => R | Promise<R>): Promise<Record<string, R>> {
   const outputs: Record<string, R> = {};
   try {
-    for (const provider of chain.providers) {
+    for (const provider of chain.providers.filter((candidate) => candidate.available())) {
       chain.force(provider.name);
       outputs[provider.name] = await read();
     }
@@ -88,7 +89,7 @@ describe("every provider returns the same result", () => {
 
 describe("portability", () => {
   test("uses Bun-only APIs only in chain providers", () => {
-    const src = import.meta.dir;
+    const src = import.meta.dirname;
     // Recursive, so the bundled extensions are held to it too.
     const offenders = readdirSync(src, { recursive: true, encoding: "utf8" })
       .filter(

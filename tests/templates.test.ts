@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -9,10 +8,11 @@ import {
   UnsupportedError,
   Vault,
 } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
 const NOW = new Date(2026, 8, 24, 19, 5);
-const KEPANO = join(import.meta.dir, "vaults", "kepano-obsidian");
+const KEPANO = join(import.meta.dirname, "vaults", "kepano-obsidian");
 const kepanoPresent = existsSync(KEPANO) && readdirSync(KEPANO).length > 0;
 /** A note's frontmatter, parsed through the prelude's YAML reading, and the text after it. */
 function splitFrontmatter(text: string): { data: Record<string, unknown>; body: string } {

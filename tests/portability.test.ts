@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vault } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 
 describe("portability", () => {
   test("reads frontmatter after a byte order mark", async () => {

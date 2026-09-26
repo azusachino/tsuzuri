@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { CaptureError, captureInputFromMarkdown, renderCapture } from "./capture.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { resolveSettings, type TsuzuriConfig } from "./settings.ts";

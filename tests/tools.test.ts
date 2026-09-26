@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPERATIONS, TsuzuriError, Vault } from "tsuzuri";
 import { agentTools, TOOLS, ToolInputError, validateInput } from "tsuzuri/tools";
+import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
 const tool = (name: string) => {
@@ -136,8 +136,8 @@ describe("running tools", () => {
 });
 
 describe("the tsuzuri-tools command", () => {
-  const CLI = join(import.meta.dir, "..", "src", "tools-cli.ts");
-  const run = (...args: string[]) => spawnSync("bun", [CLI, ...args], { encoding: "utf8" });
+  const CLI = join(import.meta.dirname, "..", "src", "tools-cli.ts");
+  const run = (...args: string[]) => spawnSync("node", [CLI, ...args], { encoding: "utf8" });
 
   test("prints the definitions, the SDK's without run", () => {
     const { status, stdout } = run("--json");

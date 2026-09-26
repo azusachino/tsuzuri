@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const hasRipgrep = spawnSync("rg", ["--version"]).status === 0;
 
 /** ripgrep over the fixture with tsuzuri's exclusions: dot folders are hidden by default, submodule paths excluded. */
@@ -18,7 +18,7 @@ function ripgrep(...args: string[]): string {
 }
 
 function tsuzuri(...args: string[]): string {
-  return spawnSync("bun", [CLI, "--vault", FIXTURE, "grep", ...args], { encoding: "utf8" }).stdout.trimEnd();
+  return spawnSync("node", [CLI, "--vault", FIXTURE, "grep", ...args], { encoding: "utf8" }).stdout.trimEnd();
 }
 
 describe("grep", () => {
@@ -67,6 +67,6 @@ describe("cli grep", () => {
       "Topics/Cognitive load.md",
       "Topics/Working memory.md",
     ]);
-    expect(spawnSync("bun", [CLI, "--vault", FIXTURE, "grep", "("]).status).toBe(2);
+    expect(spawnSync("node", [CLI, "--vault", FIXTURE, "grep", "("]).status).toBe(2);
   });
 });

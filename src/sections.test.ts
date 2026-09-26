@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { SectionError } from "./index.ts";
 import { findSection, headingsOf } from "./sections.ts";
 

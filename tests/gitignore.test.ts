@@ -1,12 +1,12 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NotFoundError, Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 
 /**
  * A copy of the fixture with a .gitignore. It is built per test rather than checked in: a .gitignore inside the
@@ -41,7 +41,7 @@ describe("the vault's .gitignore", () => {
 
   test("hides ignored notes from the CLI", () => {
     const root = ignoringVault();
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
     expect(run("grep", "zephyr", "--format", "paths").stdout).toBe("Notes/keep.private.md\n");
     expect(run("list", "--under", "Drafts", "--json").stdout.trim()).toBe("[]");
     expect(run("get", "Secret plan").status).toBe(1);

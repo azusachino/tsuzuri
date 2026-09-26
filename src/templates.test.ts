@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { renderTemplate, templateFor } from "./templates.ts";
 
 const NOW = new Date(2026, 8, 24, 19, 5);

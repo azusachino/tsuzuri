@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NotFoundError, propertyValue, Vault, WriteConflictError } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const COMMENTED = [
   "---",
   "# kept by the owner",
@@ -64,7 +64,7 @@ describe("prop set", () => {
 
   test("works from the CLI, negative numbers included", () => {
     const { root, read } = vaultWith("Commented.md", COMMENTED);
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
     expect(run("prop", "set", "Commented", "born", "-428").status).toBe(0);
     expect(run("prop", "set", "Commented", "genre", "[sf, classic]").status).toBe(0);
     expect(read()).toContain("born: -428\ngenre:\n  - sf\n  - classic\n---");
@@ -121,7 +121,7 @@ describe("put", () => {
   test("takes text, --file, or stdin from the CLI, and exits 1 when refused", () => {
     const root = copyVault();
     const run = (args: string[], input?: string) =>
-      spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8", input });
+      spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8", input });
     expect(run(["write", "Notes/From stdin.md"], "piped\n").status).toBe(0);
     expect(readFileSync(join(root, "Notes", "From stdin.md"), "utf8")).toBe("piped\n");
     expect(run(["write", "Notes/From stdin.md", "again"]).status).toBe(1);

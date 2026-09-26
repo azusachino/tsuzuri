@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
 import { parse as parseToml } from "smol-toml";
-import pkg from "../package.json" with { type: "json" };
+import pkg from "tsuzuri/package.json" with { type: "json" };
 // The CLI uses only the public SDK surface, the same one library consumers import.
 import {
   captureInputFromMarkdown,

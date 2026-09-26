@@ -1,12 +1,12 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NotFoundError, PermissionError, Vault, WriteConflictError } from "tsuzuri";
 import { TOOLS, validateInput } from "tsuzuri/tools";
+import { describe, expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const NOW = new Date(2026, 8, 26, 11, 22, 33);
 
 describe("delete", () => {
@@ -73,7 +73,7 @@ describe("delete", () => {
 
   test("runs from the CLI and as a tool", async () => {
     const root = copyVault();
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
     const dry = run("delete", "Existing idea", "--dry-run");
     expect(dry.status).toBe(0);
     expect(dry.stdout).toMatch(/^Inbox\/Existing idea\.md\t\.trash\/Inbox\/Existing idea\.md\.\d{14}\t\(dry run\)/);

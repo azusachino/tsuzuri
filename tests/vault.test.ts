@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LineRangeError, NotFoundError, Vault } from "tsuzuri";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
-export const FIXTURE = join(import.meta.dir, "fixtures", "vault");
 const vault = new Vault(FIXTURE);
 
 describe("scanning", () => {

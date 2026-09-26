@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 
 describe("reading tags", () => {
   test("normalizes each fixture tag form", async () => {
@@ -32,7 +32,7 @@ describe("counting tags", () => {
   });
 
   test("prints counts from the CLI, and --tag may repeat", () => {
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
     expect(JSON.parse(run("tags", "--under", "People", "--json").stdout)).toEqual([{ tag: "philosophy", notes: 2 }]);
     expect(run("tags", "--under", "Notes").stdout).toBe("1\ttea\n");
     expect(run("list", "--tag", "history", "--tag", "overview", "--format", "paths").stdout.trim().split("\n")).toEqual(

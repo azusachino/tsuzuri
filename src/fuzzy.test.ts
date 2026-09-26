@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { fuzzyRank, fuzzyScore } from "./fuzzy.ts";
 
 const score = (term: string, text: string) => fuzzyScore(term, text) ?? Number.NEGATIVE_INFINITY;

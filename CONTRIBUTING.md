@@ -5,8 +5,8 @@ tsuzuri is a personal project shared publicly. Issues, fixes, and honest disagre
 ## Setup
 
 ```bash
-mise install     # pins Bun, rumdl, and typos from .mise.toml
-make install     # dependencies from bun.lock, plus the kepano-obsidian test vault
+mise install node rumdl typos  # Node toolchain; Bun is optional
+make install                  # dependencies from package-lock.json, plus the kepano-obsidian test vault
 ```
 
 ## Before opening a pull request
@@ -17,6 +17,7 @@ make validate    # check, then build the binary and run it against the fixture v
 ```
 
 CI runs `make validate` on every push and pull request; a red run blocks merge. `make format` applies Biome and rumdl formatting. `make corpus` fetches the large opt-in `obsidian-help` vault, which the test suite then includes.
+`make node-smoke` additionally compares Node and Bun when Bun is installed.
 
 ## Tests
 

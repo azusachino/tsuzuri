@@ -1,12 +1,12 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConfigError, NotFoundError, OPERATION_KINDS, OPERATIONS, PermissionError, Vault } from "tsuzuri";
 import { TOOLS } from "tsuzuri/tools";
+import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 
 /** Every file under a vault with its content, to show a refused write changed nothing. */
 function snapshot(root: string): Record<string, string> {
@@ -32,7 +32,7 @@ describe("the operations table", () => {
   });
 
   test("is what every CLI command and agent tool runs", () => {
-    const help = JSON.parse(spawnSync("bun", [CLI, "help", "--json"], { encoding: "utf8" }).stdout) as {
+    const help = JSON.parse(spawnSync("node", [CLI, "help", "--json"], { encoding: "utf8" }).stdout) as {
       commands: { name: string; operation?: string }[];
     };
     for (const { name, operation } of help.commands) {
