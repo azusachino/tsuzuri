@@ -42,7 +42,7 @@ import {
   PermissionError,
   vaultPath,
 } from "./operations.ts";
-import { rank } from "./search.ts";
+import { indexDocument, rank, type SearchDocument } from "./search.ts";
 import { findSection, headingsOf, SectionError, sectionContentEnd } from "./sections.ts";
 import {
   CONFIG_FILE,
@@ -266,6 +266,7 @@ const SOURCES = new WeakMap<Extension, string>();
 /** The notes as last read, their link index, and the fingerprint `watch` compares. */
 interface Scan {
   notes: Note[];
+  search: Map<string, SearchDocument>;
   index: LinkIndex;
   fingerprint: string;
   /** Every note's resolved links, built on the first link query and dropped with the scan. */
@@ -470,13 +471,17 @@ export class Vault {
   }
 
   async search(query: string, filter: Filter & { limit?: number } = {}): Promise<SearchHit[]> {
-    return rank(filtered(await this.reachable("search"), filter), query, filter.limit ?? 10).map(
-      ({ note, score, snippet }) => ({
-        ...summarize(note),
-        score,
-        snippet,
-      }),
-    );
+    this.mask.check("search");
+    const scan = await this.load();
+    const visible = this.mask.scope("search").everywhere
+      ? scan.notes
+      : scan.notes.filter((note) => this.mask.reaches("search", note.path));
+    const docs = filtered(visible, filter).map((note) => scan.search.get(note.path) as SearchDocument);
+    return rank(docs, query, filter.limit ?? 10).map(({ note, score, snippet }) => ({
+      ...summarize(note),
+      score,
+      snippet,
+    }));
   }
 
   /** Lines matching a regular expression (or literal text with `fixed`), with ripgrep's smart case. */
@@ -1108,7 +1113,12 @@ export class Vault {
     );
     const fingerprint = this.watch === undefined ? "" : await this.fingerprint(paths);
     this.checked = Date.now();
-    return { notes, index: new LinkIndex(paths), fingerprint };
+    return {
+      notes,
+      search: new Map(notes.map((note) => [note.path, indexDocument(note)])),
+      index: new LinkIndex(paths),
+      fingerprint,
+    };
   }
 
   private async paths(): Promise<string[]> {

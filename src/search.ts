@@ -6,6 +6,23 @@ export interface Ranked {
   snippet: string;
 }
 
+/** Query-independent text and word counts, held only until the vault's next scan. */
+export interface SearchDocument {
+  note: Note;
+  lowered: string;
+  termCounts: Map<string, number>;
+}
+
+export function indexDocument(note: Note): SearchDocument {
+  const lowered = note.body.toLowerCase();
+  const termCounts = new Map<string, number>();
+  for (const match of lowered.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const term = match[0];
+    termCounts.set(term, (termCounts.get(term) ?? 0) + 1);
+  }
+  return { note, lowered, termCounts };
+}
+
 const K1 = 1.2;
 const B = 0.75;
 const TITLE_BOOST = 2;
@@ -53,29 +70,29 @@ function snippet(body: string, lowered: string, query: Term[]): string {
   return `${start > 0 ? "…" : ""}${text}${start + SNIPPET_RADIUS * 2 < body.length ? "…" : ""}`;
 }
 
-/** BM25 over note bodies, plus boosts for terms in the title or tags. No index: every call scans the notes given. */
-export function rank(notes: Note[], query: string, limit: number): Ranked[] {
+/** BM25 over scan-held text/counts, plus boosts for terms in the title or tags. */
+export function rank(docs: SearchDocument[], query: string, limit: number): Ranked[] {
   const wanted = terms(query);
-  if (wanted.length === 0 || notes.length === 0) return [];
+  if (wanted.length === 0 || docs.length === 0) return [];
 
   const counters = wanted.map(counter);
-  const docs = notes.map((note) => {
-    const lowered = note.body.toLowerCase();
-    return { note, lowered, counts: counters.map((count) => count(lowered)) };
-  });
   const averageLength = docs.reduce((sum, doc) => sum + doc.lowered.length, 0) / docs.length || 1;
+  const countIn = (doc: SearchDocument, term: Term, i: number) =>
+    term.cjk ? (counters[i] as (text: string) => number)(doc.lowered) : (doc.termCounts.get(term.text) ?? 0);
+  const counts = docs.map((doc) => wanted.map((term, i) => countIn(doc, term, i)));
   const idf = wanted.map((_, i) => {
-    const df = docs.filter((doc) => (doc.counts[i] ?? 0) > 0).length;
+    const df = counts.filter((row) => (row[i] ?? 0) > 0).length;
     return Math.log(1 + (docs.length - df + 0.5) / (df + 0.5));
   });
 
   const hits: Ranked[] = [];
-  for (const { note, lowered, counts } of docs) {
+  for (const [index, { note, lowered }] of docs.entries()) {
+    const termCounts = counts[index] as number[];
     const title = note.title.toLowerCase();
     const tags = note.tags.join(" ");
     let score = 0;
     counters.forEach((count, i) => {
-      const tf = counts[i] ?? 0;
+      const tf = termCounts[i] ?? 0;
       const weight = idf[i] ?? 0;
       if (tf > 0) score += (weight * tf * (K1 + 1)) / (tf + K1 * (1 - B + (B * lowered.length) / averageLength));
       if (count(title) > 0) score += TITLE_BOOST * weight;

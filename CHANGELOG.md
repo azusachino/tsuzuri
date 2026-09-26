@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Faster repeat search.** The in-memory scan keeps lowercase bodies and word counts, then discards them on reload; ranking and snippets stay the same. A [10,248-note synthetic benchmark](docs/benchmarks/search-0.8.md) measured warm search at 37.07 ms before and 20.97–22.49 ms after. ([#96](https://github.com/azusachino/tsuzuri/issues/96))
 - **Markdown folders.** A first H1 gives a note its title when frontmatter has no title, and `README.md` can serve as a folder index. A corpus test guards existing Obsidian titles. ([#95](https://github.com/azusachino/tsuzuri/issues/95))
 - **Vault discovery.** Without an explicit vault or `$TSUZURI_VAULT`, the CLI uses the nearest ancestor holding `tsuzuri.toml`, falling back to cwd. `config` shows the selected root. ([#94](https://github.com/azusachino/tsuzuri/issues/94))
 - **Breaking: note types and smaller settings.** `templates/<type>.md` defines a type; capture uses `templates/capture.md` when present. `[types.<type>]` routes its folder and filename pattern, while `[tags]` and `[titles]` hold vault-wide rules. Removed capture properties, values, timestamp and house-style keys now raise migration errors. ([#92](https://github.com/azusachino/tsuzuri/issues/92), [ADR 0014](docs/decisions/0014-note-types-from-templates.md))
