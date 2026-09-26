@@ -99,7 +99,7 @@ From the 0.8.0 research: tsuzuri run on a 10,248-page MkDocs collection, its con
 4. **Note types from templates (implemented)**, and `[tags]` and `[titles]` as the only rule blocks ([#92](https://github.com/azusachino/tsuzuri/issues/92)), then `init`, `types`, `check`, and `config` (implemented; [#93](https://github.com/azusachino/tsuzuri/issues/93)).
 5. **Any Markdown folder (implemented):** the vault root found by walking up ([#94](https://github.com/azusachino/tsuzuri/issues/94)), and titles from a first-line heading with `README.md` as a folder index ([#95](https://github.com/azusachino/tsuzuri/issues/95)).
 6. **Scale and paging (implemented):** search statistics kept per scan ([#96](https://github.com/azusachino/tsuzuri/issues/96)), and `--offset` on search, find, grep, and list ([#97](https://github.com/azusachino/tsuzuri/issues/97)).
-7. **A product README and wider use cases** ([#98](https://github.com/azusachino/tsuzuri/issues/98)), last, so every example runs.
+7. **A product README and wider use cases (implemented)** ([#98](https://github.com/azusachino/tsuzuri/issues/98)), last, with examples checked against the CLI.
 
 Later, each only when a use case asks for it: reading a site generator's navigation such as `mkdocs.yml`, a drafts folder where an agent's notes wait for review, and extensions from npm packages (`extensions = ["npm:<pkg>"]`, run with `npx -p tsuzuri -p <pkg>`) once a published one exists; until then an extension is shared as a file a vault copies into `.tsuzuri/` ([extensions](extensions.md)). An MCP or language server stays out ([ADR 0008](decisions/0008-files-only-no-git-no-server.md)).
 

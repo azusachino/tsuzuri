@@ -22,10 +22,11 @@ What people and agents do with tsuzuri, the commands each case walks through, an
 
 ### T3. Browse a folder before searching
 
-`nav`, then `nav <folder>`, reading the folder's `index.md` headings. Shipped.
+`nav`, then `nav <folder>`, reading the folder's `index.md` or `README.md` headings. Shipped.
 
 - `vault.test › shows the root folders and notes`
 - `vault.test › shows a folder's index note and headings`
+- `vault.test › uses README.md as the folder index, with index.md taking precedence`
 
 ### T4. Check the vault's links
 
@@ -59,12 +60,13 @@ What people and agents do with tsuzuri, the commands each case walks through, an
 
 ### T7. Recently touched notes, latest in a category
 
-`list --where type=book --sort modified --desc --limit 10`. `--format paths` pipes the result to `xargs` or `fzf`. `--where` takes any frontmatter property, and notes without the sort value come last. Shipped.
+`list --where type=book --sort modified --desc --limit 10`; `--offset 10` requests the next page in the same order. `--format paths` pipes the result to `xargs` or `fzf`. `--where` takes any frontmatter property, and notes without the sort value come last. Shipped.
 
 - `vault.test › filters by property, tag, and folder`
 - `cli.test › --format paths prints one path per line`
 - `list.test › give the ten most recently modified books in one call`
 - `list.test › matches any frontmatter property as text, and list properties by any item`
+- `vault.test › offset slices each command's existing order`
 
 ### T8. Rename a note without breaking its links
 
@@ -94,6 +96,24 @@ What people and agents do with tsuzuri, the commands each case walks through, an
 - `props-put.test › replaces a whole note by any reference, with no hash needed`
 - `props-put.test › refuses a stale hash, and a note that does not exist`
 
+### T11. Read a documentation site or plain Markdown folder
+
+Run `nav` or `search` in a folder without Obsidian or a `tsuzuri.toml`. A first H1 names a page whose file is `01.md`; `README.md` acts as the folder index. From a subfolder, the CLI uses the nearest ancestor with `tsuzuri.toml`, or cwd when none exists. Shipped.
+
+- `vault.test › uses a first H1 after frontmatter, with property then filename precedence`
+- `vault.test › uses README.md as the folder index, with index.md taking precedence`
+- `root-discovery.test › walks to the nearest ancestor with tsuzuri.toml`
+- `root-discovery.test › uses cwd when no ancestor has a config`
+- `corpus.test › keeps Obsidian titles from frontmatter or filenames`
+
+### T12. Set up a vault without guessing the config format
+
+Run `init --dry-run` to see a starter `tsuzuri.toml` and `templates/capture.md`, then `init` to write them. It refuses either occupied target, and `config --json` shows the effective values and sources. Shipped.
+
+- `self-description.test › init previews both starter files, writes once, and refuses either existing target`
+- `self-description.test › init refuses a pre-existing template before writing the config`
+- `self-description.test › types and config describe effective routes and provenance`
+
 ## from an agent
 
 An agent reaches tsuzuri in one of two ways: a coding agent shells out to the CLI with `--json`, and a bot imports the SDK in-process. Both see the same operations, and every case below is written for a model that has never seen the vault.
@@ -107,7 +127,7 @@ An agent reaches tsuzuri in one of two ways: a coding agent shells out to the CL
 
 ### A2. Answer a question from the vault, citing notes
 
-`search <question> --limit 5 --json`, then `get <path> --max-chars <n>` on the best hits, answering with their paths. A hit carries the same summary as `list` (type, status, tags, dates), and `--fields` adds any frontmatter key, so the agent can choose between hits without another call. In a long note, `get <path> --lines a:b` reads only the part it needs. Shipped.
+`search <question> --limit 5 --json`, then `get <path> --max-chars <n>` on the best hits, answering with their paths. `--offset 5` gets the next page in the same rank order. A hit carries the same summary as `list` (type, status, tags, dates), and `--fields` adds any frontmatter key, so the agent can choose between hits without another call. In a long note, `get <path> --lines a:b` reads only the part it needs. Shipped.
 
 - `vault.test › ranks a title match first`
 - `vault.test › returns a content hash and marks truncation`
@@ -115,6 +135,7 @@ An agent reaches tsuzuri in one of two ways: a coding agent shells out to the CL
 - `vault.test › selects summary fields and frontmatter keys, null when absent`
 - `cli.test › emits JSON with --json`
 - `vault.test › counts lines from the top of the file, frontmatter included`
+- `vault.test › offset slices each command's existing order`
 
 ### A3. Locate an exact phrase, then read around it
 
@@ -180,11 +201,13 @@ When the vault does not say where something lives, tsuzuri raises `UnsupportedEr
 
 ### A10. Serve a long-running process
 
-A bot keeps one `Vault` for its lifetime and passes `watch`, so a read rescans, at most once per interval, when the notes' paths, modification times, or sizes change, and never otherwise. Reads that arrive during a scan share it. A process without `watch` calls `reload()` after the files change. It runs on Bun or Node. Shipped.
+A bot keeps one `Vault` for its lifetime and passes `watch`, so a read rescans, at most once per interval, when the notes' paths, modification times, or sizes change, and never otherwise. Reads that arrive during a scan share it. The scan also keeps lowercase text and word counts for repeat searches, rebuilding them when it changes. A process without `watch` calls `reload()` after the files change. It runs on Bun or Node. Shipped.
 
 - `make node-smoke`, which runs the read commands on Node and requires Bun's output
 - `refresh.test › a live vault sees a changed and a new file on its next read`
 - `refresh.test › reads that arrive during a scan share it`
+- `vault.test › rebuilds search statistics with the scan after a reload`
+- [Search benchmark](benchmarks/search-0.8.md) on a 10,248-note synthetic tree
 
 ### A11. Hand an agent framework tsuzuri's tools
 
@@ -218,3 +241,21 @@ A host opens one vault with an `allow` mask. Reads outside its visible folders d
 - `mask.test › hides the notes outside a read rule's folders from every read`
 - `extensions.test › the mask covers its operations, and every call they make`
 - `extensions.test › refuses a folder scope on an extension operation it cannot enforce`
+
+### A15. Work through a large vault over several questions
+
+Keep one `Vault` in the agent process, search with `limit` and `offset`, and fetch only the selected notes. Repeat searches reuse the scan's lowercase text and word counts, with no index written to disk. Reload after external edits, or use `watch`. Shipped.
+
+- `vault.test › keeps paths, BM25 scores, and snippets from the uncached calculation`
+- `vault.test › rebuilds search statistics with the scan after a reload`
+- `vault.test › offset slices each command's existing order`
+- `tools.test › read tools page in the same order as SDK calls`
+- [Search benchmark](benchmarks/search-0.8.md) on a 10,248-note synthetic tree
+
+### A16. Validate an agent-created note against vault conventions
+
+After creating a note, run `check <note> --json` or the read-only `tsuzuri_check` tool. It reports missing keys from that note type's template and failed `[tags]` or `[titles]` rules; `ok: false` and CLI exit 1 keep a failed note visible for correction. `types` or `tsuzuri_types` lists the available templates and routes first. Shipped.
+
+- `self-description.test › check reports template keys and title/tag failures, with CLI exit 1`
+- `self-description.test › check accepts a note created from its template`
+- `self-description.test › types and config describe effective routes and provenance`

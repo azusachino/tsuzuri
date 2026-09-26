@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Product guide.** The README starts with a quick start and links to the full [configuration reference](docs/configuration.md); use cases now cover plain Markdown folders, large agent sessions, `init`, and `check`. ([#98](https://github.com/azusachino/tsuzuri/issues/98))
 - **Paging.** `search`, `find`, `grep`, and `list` take a zero-based `--offset`, with matching SDK options and agent tool inputs; the order stays the same. ([#97](https://github.com/azusachino/tsuzuri/issues/97))
 - **Faster repeat search.** The in-memory scan keeps lowercase bodies and word counts, then discards them on reload; ranking and snippets stay the same. A [10,248-note synthetic benchmark](docs/benchmarks/search-0.8.md) measured warm search at 37.07 ms before and 20.97–22.49 ms after. ([#96](https://github.com/azusachino/tsuzuri/issues/96))
 - **Markdown folders.** A first H1 gives a note its title when frontmatter has no title, and `README.md` can serve as a folder index. A corpus test guards existing Obsidian titles. ([#95](https://github.com/azusachino/tsuzuri/issues/95))

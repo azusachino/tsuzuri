@@ -40,7 +40,7 @@ CI runs `make validate` on every push and pull request; a red run blocks merge. 
 
 npm trusts that workflow by OIDC, so no npm token is stored: on npmjs.com, the package's settings name `azusachino/tsuzuri` and `release.yml` as its trusted publisher. `make publish` remains for a manual release from a maintainer's machine, after `npm login`.
 
-Consumers install from npm, as the [README](README.md#install) shows. A Git dependency on the repository installs the package without its built `dist/lib`, which Node needs; install from npm.
+Consumers install from npm, as the [README](README.md#quick-start) shows. A Git dependency on the repository installs the package without its built `dist/lib`, which Node needs; install from npm.
 
 ## Reporting a security issue
 
