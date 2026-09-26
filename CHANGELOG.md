@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Paging.** `search`, `find`, `grep`, and `list` take a zero-based `--offset`, with matching SDK options and agent tool inputs; the order stays the same. ([#97](https://github.com/azusachino/tsuzuri/issues/97))
 - **Faster repeat search.** The in-memory scan keeps lowercase bodies and word counts, then discards them on reload; ranking and snippets stay the same. A [10,248-note synthetic benchmark](docs/benchmarks/search-0.8.md) measured warm search at 37.07 ms before and 20.97–22.49 ms after. ([#96](https://github.com/azusachino/tsuzuri/issues/96))
 - **Markdown folders.** A first H1 gives a note its title when frontmatter has no title, and `README.md` can serve as a folder index. A corpus test guards existing Obsidian titles. ([#95](https://github.com/azusachino/tsuzuri/issues/95))
 - **Vault discovery.** Without an explicit vault or `$TSUZURI_VAULT`, the CLI uses the nearest ancestor holding `tsuzuri.toml`, falling back to cwd. `config` shows the selected root. ([#94](https://github.com/azusachino/tsuzuri/issues/94))

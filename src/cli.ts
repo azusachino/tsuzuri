@@ -94,6 +94,7 @@ const OPTIONS = {
   sort: { type: "string", value: "<modified|created|title|path>", summary: "order; notes without the value sort last" },
   desc: { type: "boolean", summary: "sort descending" },
   limit: { type: "string", value: "<n>", summary: "most results" },
+  offset: { type: "string", value: "<n>", summary: "skip this many results in the same order" },
   "max-chars": { type: "string", value: "<n>", summary: "truncate the note body" },
   lines: {
     type: "string",
@@ -180,7 +181,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "search",
     args: "<query...>",
     summary: "rank notes by relevance (BM25; CJK matches as substrings)",
-    options: [...FILTERS, "limit", "fields"],
+    options: [...FILTERS, "limit", "offset", "fields"],
     example: "tsuzuri search cognitive load --limit 5 --json",
   },
   {
@@ -188,7 +189,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "grep",
     args: "<pattern>",
     summary: "matching lines as path:line:text, like rg -n (smart case)",
-    options: [...FILTERS, "fixed-strings", "context"],
+    options: [...FILTERS, "fixed-strings", "context", "offset"],
     example: 'tsuzuri grep -F "working memory" -C 2',
   },
   {
@@ -196,7 +197,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "suggest",
     args: "<query...>",
     summary: "fuzzy match over paths, titles, and aliases, ranked as fzf ranks",
-    options: [...FILTERS, "limit", "fields"],
+    options: [...FILTERS, "limit", "offset", "fields"],
     example: "tsuzuri find cogload --json",
   },
   {
@@ -204,7 +205,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "list",
     args: "",
     summary: "notes matching the filters, optionally sorted",
-    options: [...FILTERS, "sort", "desc", "limit", "fields"],
+    options: [...FILTERS, "sort", "desc", "limit", "offset", "fields"],
     example: "tsuzuri list --tag psychology --sort modified --desc --limit 10",
   },
   {
@@ -482,6 +483,15 @@ function count(name: string, value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) throw new UsageError(`--${name} must be a positive integer`);
+  return parsed;
+}
+
+function offset(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed)) {
+    throw new UsageError("--offset must be a non-negative integer");
+  }
   return parsed;
 }
 
@@ -850,6 +860,7 @@ async function main(): Promise<void> {
           ...filter,
           fixed: opts["fixed-strings"],
           context: opts.context === undefined ? undefined : lineCount(opts.context),
+          offset: offset(opts.offset),
         });
       } catch (error) {
         if (error instanceof SyntaxError) throw new UsageError(`invalid pattern: ${error.message}`);
@@ -859,7 +870,11 @@ async function main(): Promise<void> {
     }
     case "search": {
       if (args.length === 0) throw new UsageError("search needs a query");
-      const hits = await vault.search(args.join(" "), { ...filter, limit: count("limit", opts.limit) });
+      const hits = await vault.search(args.join(" "), {
+        ...filter,
+        limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
+      });
       return emitNotes(vault, hits, hits, () =>
         hits.length === 0
           ? "no matches"
@@ -868,7 +883,11 @@ async function main(): Promise<void> {
     }
     case "find": {
       if (args.length === 0) throw new UsageError("find needs a query");
-      const hits = await vault.suggest(args.join(" "), { ...filter, limit: count("limit", opts.limit) });
+      const hits = await vault.suggest(args.join(" "), {
+        ...filter,
+        limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
+      });
       return emitNotes(vault, hits, hits, () =>
         hits.length === 0 ? "no matches" : hits.map((hit) => `${hit.score}\t${hit.path}\t${hit.title}`).join("\n"),
       );
@@ -888,6 +907,7 @@ async function main(): Promise<void> {
         sort: sort as (typeof SORT_KEYS)[number] | undefined,
         desc: opts.desc,
         limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
       });
       return emitNotes(vault, notes, notes, () => notes.map((note) => `${note.path}\t${note.title}`).join("\n"));
     }

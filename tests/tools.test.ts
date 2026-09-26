@@ -124,6 +124,24 @@ describe("validateInput", () => {
 });
 
 describe("running tools", () => {
+  test("read tools page in the same order as SDK calls", async () => {
+    const vault = new Vault(FIXTURE);
+    expect(await call(vault, "tsuzuri_search", { query: "cognitive load", offset: 1, limit: 2 })).toEqual(
+      await vault.search("cognitive load", { offset: 1, limit: 2 }),
+    );
+    expect(await call(vault, "tsuzuri_find", { query: "o", offset: 1, limit: 2 })).toEqual(
+      await vault.suggest("o", { offset: 1, limit: 2 }),
+    );
+    expect(await call(vault, "tsuzuri_grep", { pattern: "memory", offset: 1 })).toEqual(
+      await vault.grep("memory", { fixed: true, offset: 1 }),
+    );
+    expect(await call(vault, "tsuzuri_list", { offset: 1, limit: 2 })).toEqual(
+      await vault.list({ offset: 1, limit: 2 }),
+    );
+    expect(() => validateInput(tool("tsuzuri_search"), { query: "x", offset: -1 })).toThrow(ToolInputError);
+    expect(validateInput(tool("tsuzuri_list"), { offset: 0 })).toBeDefined();
+  });
+
   test("reads go through the SDK", async () => {
     const vault = new Vault(copyVault());
     expect(await call(vault, "tsuzuri_get", { note: "clt", lines: "1:2" })).toMatchObject({ start: 1, end: 2 });

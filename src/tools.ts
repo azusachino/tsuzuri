@@ -37,6 +37,7 @@ export class ToolInputError extends InputError {}
 
 const str = (description: string): PropertySchema => ({ type: "string", description });
 const int = (description: string): PropertySchema => ({ type: "integer", description, minimum: 1 });
+const OFFSET: PropertySchema = { type: "integer", description: "Skip this many results in order", minimum: 0 };
 const bool = (description: string): PropertySchema => ({ type: "boolean", description });
 const list = (description: string): PropertySchema => ({ type: "array", description, items: { type: "string" } });
 
@@ -162,11 +163,17 @@ export const TOOLS: ToolDefinition[] = [
     name: "tsuzuri_search",
     operation: "search",
     description: "Rank notes by relevance to words (BM25; CJK matches as substrings). Returns summaries with snippets.",
-    inputSchema: schema({ query: str("Words to look for"), limit: int("Most results; 10 by default"), ...FILTERS }, [
-      "query",
-    ]),
+    inputSchema: schema(
+      { query: str("Words to look for"), limit: int("Most results; 10 by default"), offset: OFFSET, ...FILTERS },
+      ["query"],
+    ),
     annotations: READ,
-    run: (vault, input) => vault.search(s(input, "query"), { ...filterOf(input), limit: o<number>(input, "limit") }),
+    run: (vault, input) =>
+      vault.search(s(input, "query"), {
+        ...filterOf(input),
+        limit: o<number>(input, "limit"),
+        offset: o<number>(input, "offset"),
+      }),
   },
   {
     name: "tsuzuri_grep",
@@ -178,6 +185,7 @@ export const TOOLS: ToolDefinition[] = [
         pattern: str(`Text to find, at most ${GREP_PATTERN_LIMIT} characters; a regular expression with regex`),
         regex: bool("Read the pattern as a JavaScript regular expression instead of literal text"),
         context: { type: "integer", description: "Lines of context either side", minimum: 0 },
+        offset: OFFSET,
         ...FILTERS,
       },
       ["pattern"],
@@ -195,6 +203,7 @@ export const TOOLS: ToolDefinition[] = [
           ...filterOf(input),
           fixed: o<boolean>(input, "regex") !== true,
           context: o<number>(input, "context"),
+          offset: o<number>(input, "offset"),
         });
       } catch (error) {
         if (error instanceof SyntaxError) throw new ToolInputError(`tsuzuri_grep: ${error.message}`);
@@ -206,9 +215,13 @@ export const TOOLS: ToolDefinition[] = [
     name: "tsuzuri_find",
     operation: "suggest",
     description: "Fuzzy-match notes by path, title, or alias, for a loose reference such as a half-remembered name.",
-    inputSchema: schema({ query: str("A loose name, abbreviation, or typo"), limit: int("Most results") }, ["query"]),
+    inputSchema: schema(
+      { query: str("A loose name, abbreviation, or typo"), limit: int("Most results"), offset: OFFSET },
+      ["query"],
+    ),
     annotations: READ,
-    run: (vault, input) => vault.suggest(s(input, "query"), { limit: o<number>(input, "limit") }),
+    run: (vault, input) =>
+      vault.suggest(s(input, "query"), { limit: o<number>(input, "limit"), offset: o<number>(input, "offset") }),
   },
   {
     name: "tsuzuri_list",
@@ -224,6 +237,7 @@ export const TOOLS: ToolDefinition[] = [
       sort: { type: "string", description: "Sort key", enum: SORT_KEYS },
       desc: bool("Sort descending"),
       limit: int("Most results"),
+      offset: OFFSET,
     }),
     annotations: READ,
     run: (vault, input) =>
@@ -233,6 +247,7 @@ export const TOOLS: ToolDefinition[] = [
         sort: o<(typeof SORT_KEYS)[number]>(input, "sort"),
         desc: o<boolean>(input, "desc"),
         limit: o<number>(input, "limit"),
+        offset: o<number>(input, "offset"),
       }),
   },
   {

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LineRangeError, NotFoundError, Vault } from "tsuzuri";
+import { InputError, LineRangeError, NotFoundError, Vault } from "tsuzuri";
 import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
@@ -109,6 +109,27 @@ describe("list", () => {
     ]);
     expect((await vault.list({ tag: "psychology/memory", under: "Topics" })).length).toBe(2);
     expect((await vault.list({ status: "draft" })).map((note) => note.path)).toEqual(["Inbox/Existing idea.md"]);
+  });
+});
+
+describe("paging", () => {
+  test("offset slices each command's existing order", async () => {
+    const listed = await vault.list({ sort: "path" });
+    expect(await vault.list({ sort: "path", offset: 2, limit: 3 })).toEqual(listed.slice(2, 5));
+    const searched = await vault.search("cognitive load", { limit: 100 });
+    expect(await vault.search("cognitive load", { offset: 1, limit: 2 })).toEqual(searched.slice(1, 3));
+    const found = await vault.suggest("o", { limit: 100 });
+    expect(await vault.suggest("o", { offset: 2, limit: 3 })).toEqual(found.slice(2, 5));
+    const lines = await vault.grep("memory");
+    expect(await vault.grep("memory", { offset: 2 })).toEqual(lines.slice(2));
+    expect(await vault.list({ offset: 0 })).toEqual(await vault.list());
+  });
+
+  test("rejects negative and fractional SDK offsets", async () => {
+    await expect(vault.list({ offset: -1 })).rejects.toThrow(InputError);
+    await expect(vault.search("memory", { offset: 0.5 })).rejects.toThrow(InputError);
+    await expect(vault.suggest("memory", { offset: -1 })).rejects.toThrow(InputError);
+    await expect(vault.grep("memory", { offset: -1 })).rejects.toThrow(InputError);
   });
 });
 

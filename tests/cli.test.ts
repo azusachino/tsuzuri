@@ -77,6 +77,25 @@ describe("cli get by line", () => {
 });
 
 describe("cli output shapes", () => {
+  test("--offset pages search, find, grep, and list without changing their order", () => {
+    const cases = [
+      ["search", "cognitive load", "--limit", "2"],
+      ["find", "o", "--limit", "2"],
+      ["grep", "memory"],
+      ["list", "--sort", "path", "--limit", "2"],
+    ];
+    for (const [command, ...args] of cases) {
+      const fullArgs = args.filter((arg) => arg !== "--limit" && arg !== "2");
+      const all = JSON.parse(run(command as string, ...fullArgs, "--json").stdout) as unknown[];
+      const page = run(command as string, ...args, "--offset", "1", "--json");
+      expect(page.code, `${command}: ${page.stderr}`).toBe(0);
+      expect(JSON.parse(page.stdout)).toEqual(all.slice(1, command === "grep" ? undefined : 3));
+    }
+    expect(run("list", "--offset=abc").code).toBe(2);
+    expect(run("list", "--offset=-1").code).toBe(2);
+    expect(run("get", "Home", "--offset", "1").code).toBe(2);
+  });
+
   test("--fields keeps the named fields, in JSON or as tab-separated text", () => {
     const json = run("list", "--type", "person", "--fields", "path,born", "--json");
     expect(JSON.parse(json.stdout)).toEqual([

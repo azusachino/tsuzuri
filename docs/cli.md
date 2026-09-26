@@ -95,6 +95,7 @@ Rank notes by relevance (BM25; CJK matches as substrings).
 | `--under <folder>` | only notes in this folder |
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: hits: the summary fields plus `score` and `snippet`.
@@ -118,6 +119,7 @@ Matching lines as path:line:text, like rg -n (smart case).
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `-F, --fixed-strings` | match the pattern as literal text |
 | `-C, --context <n>` | lines either side (get --around: 5 by default) |
+| `--offset <n>` | skip this many results in the same order |
 
 With `--json`: hits: `path`, `line`, `text`, and with `-C` the `before` and `after` lines.
 
@@ -139,6 +141,7 @@ Fuzzy match over paths, titles, and aliases, ranked as fzf ranks. Each word of t
 | `--under <folder>` | only notes in this folder |
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: suggestions: the summary fields plus `score` and the `matched` path, title, or alias.
@@ -163,6 +166,7 @@ Notes matching the filters, optionally sorted.
 | `--sort <modified\|created\|title\|path>` | order; notes without the value sort last |
 | `--desc` | sort descending |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: summaries.

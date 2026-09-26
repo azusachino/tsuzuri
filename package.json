@@ -39,7 +39,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=4",
     "build": "npm run build:lib",
     "build:lib": "rm -rf dist/lib && tsc -p tsconfig.build.json",
     "prepack": "npm run build:lib"

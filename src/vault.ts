@@ -24,7 +24,7 @@ import {
   validTags,
 } from "./capture.ts";
 import { formatDate } from "./dateformat.ts";
-import { ConfigError, TsuzuriError } from "./errors.ts";
+import { ConfigError, InputError, TsuzuriError } from "./errors.ts";
 import { type Frontmatter, frontmatterRange, splitFrontmatter, stringList } from "./frontmatter.ts";
 import { fuzzyRank } from "./fuzzy.ts";
 import { type GrepHit, type GrepOptions, grep } from "./grep.ts";
@@ -161,6 +161,8 @@ export interface ListOptions {
   sort?: (typeof SORT_KEYS)[number];
   desc?: boolean;
   limit?: number;
+  /** Number of sorted results to skip before applying `limit`. */
+  offset?: number;
 }
 
 export interface OutgoingLink {
@@ -467,26 +469,30 @@ export class Vault {
         return direction * left.localeCompare(right) || a.path.localeCompare(b.path);
       });
     }
-    return filter.limit === undefined ? notes : notes.slice(0, filter.limit);
+    const start = pageOffset(filter.offset);
+    return notes.slice(start, filter.limit === undefined ? undefined : start + filter.limit);
   }
 
-  async search(query: string, filter: Filter & { limit?: number } = {}): Promise<SearchHit[]> {
+  async search(query: string, filter: Filter & { limit?: number; offset?: number } = {}): Promise<SearchHit[]> {
     this.mask.check("search");
     const scan = await this.load();
     const visible = this.mask.scope("search").everywhere
       ? scan.notes
       : scan.notes.filter((note) => this.mask.reaches("search", note.path));
     const docs = filtered(visible, filter).map((note) => scan.search.get(note.path) as SearchDocument);
-    return rank(docs, query, filter.limit ?? 10).map(({ note, score, snippet }) => ({
-      ...summarize(note),
-      score,
-      snippet,
-    }));
+    const start = pageOffset(filter.offset);
+    return rank(docs, query, start + (filter.limit ?? 10))
+      .slice(start)
+      .map(({ note, score, snippet }) => ({
+        ...summarize(note),
+        score,
+        snippet,
+      }));
   }
 
   /** Lines matching a regular expression (or literal text with `fixed`), with ripgrep's smart case. */
   async grep(pattern: string, options: Filter & GrepOptions = {}): Promise<GrepHit[]> {
-    return grep(filtered(await this.reachable("grep"), options), pattern, options);
+    return grep(filtered(await this.reachable("grep"), options), pattern, options).slice(pageOffset(options.offset));
   }
 
   /** Every tag in the filtered notes with its note count, so a writer can reuse a tag instead of inventing one. */
@@ -1008,7 +1014,10 @@ export class Vault {
   }
 
   /** Notes ranked by fuzzy match of the query over their path, title, and aliases, with fzf's scoring rules. */
-  async suggest(query: string, options: Filter & { limit?: number; anyTerm?: boolean } = {}): Promise<Suggestion[]> {
+  async suggest(
+    query: string,
+    options: Filter & { limit?: number; offset?: number; anyTerm?: boolean } = {},
+  ): Promise<Suggestion[]> {
     return suggestAmong(await this.reachable("suggest"), query, options);
   }
 
@@ -1220,14 +1229,21 @@ function filtered(notes: Note[], filter: Filter): Note[] {
 function suggestAmong(
   notes: Note[],
   query: string,
-  options: Filter & { limit?: number; anyTerm?: boolean },
+  options: Filter & { limit?: number; offset?: number; anyTerm?: boolean },
 ): Suggestion[] {
   const candidates = filtered(notes, options).map((note) => ({
     item: note,
     texts: [note.path, note.title, ...note.aliases],
   }));
-  const ranked = fuzzyRank(query, candidates, options.limit ?? 10, { anyTerm: options.anyTerm });
-  return ranked.map(({ item, score, matched }) => ({ ...summarize(item), score, matched }));
+  const start = pageOffset(options.offset);
+  const ranked = fuzzyRank(query, candidates, start + (options.limit ?? 10), { anyTerm: options.anyTerm });
+  return ranked.slice(start).map(({ item, score, matched }) => ({ ...summarize(item), score, matched }));
+}
+
+function pageOffset(value: number | undefined): number {
+  if (value === undefined) return 0;
+  if (!Number.isSafeInteger(value) || value < 0) throw new InputError("offset must be a non-negative integer");
+  return value;
 }
 
 function summarize(note: Note): NoteSummary {
