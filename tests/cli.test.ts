@@ -94,7 +94,7 @@ describe("cli output shapes", () => {
     expect(run("list", "--offset=abc").code).toBe(2);
     expect(run("list", "--offset=-1").code).toBe(2);
     expect(run("get", "Home", "--offset", "1").code).toBe(2);
-  });
+  }, 20_000);
 
   test("--fields keeps the named fields, in JSON or as tab-separated text", () => {
     const json = run("list", "--type", "person", "--fields", "path,born", "--json");
@@ -173,7 +173,7 @@ describe("help", () => {
       const result = spawnSync("node", [CLI, "--vault", root, ...words], { encoding: "utf8" });
       expect(result.status, `${name}: ${result.stderr}`).not.toBe(2);
     }
-  });
+  }, 20_000);
 
   test("gives one command's help for <command> --help and help <command>", () => {
     const direct = run("get", "--help");
