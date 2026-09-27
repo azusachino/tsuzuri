@@ -1,6 +1,6 @@
 {
   "name": "tsuzuri",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "An SDK and CLI for reading and capturing into an Obsidian-compatible Markdown vault",
   "type": "module",
   "module": "./dist/lib/index.js",
@@ -24,7 +24,8 @@
       "bun": "./src/extensions/journal.ts",
       "types": "./dist/lib/extensions/journal.d.ts",
       "default": "./dist/lib/extensions/journal.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "tsuzuri": "./dist/lib/cli.js",
@@ -32,16 +33,16 @@
   },
   "engines": {
     "bun": ">=1.4.0",
-    "node": ">=24"
+    "node": ">=22"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "bun test",
-    "build": "bun build --compile src/cli.ts --outfile dist/tsuzuri",
-    "build:lib": "rm -rf dist/lib && tsc -p tsconfig.build.json && bun build src/cli.ts src/tools-cli.ts --target=node --packages=external --outdir dist/lib",
-    "prepack": "bun run build:lib"
+    "test": "vitest run --maxWorkers=4",
+    "build": "npm run build:lib",
+    "build:lib": "rm -rf dist/lib && tsc -p tsconfig.build.json",
+    "prepack": "npm run build:lib"
   },
   "dependencies": {
     "diff": "9.0.0",
@@ -83,6 +84,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@types/bun": "1.4.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
   }
 }

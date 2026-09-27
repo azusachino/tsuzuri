@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,9 +5,10 @@ import { join } from "node:path";
 import { ConfigError, NotFoundError, PermissionError, UnsupportedError, Vault } from "tsuzuri";
 import journal from "tsuzuri/extensions/journal";
 import { agentTools, validateInput } from "tsuzuri/tools";
+import { describe, expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const JOURNAL = [
   'extensions = ["tsuzuri:journal"]',
   "[capture]",
@@ -152,10 +152,10 @@ describe("the bundled journal", () => {
 
   test("runs from the CLI, with its own options and help", () => {
     const root = vaultWith(JOURNAL);
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
     const day = run("journal", "day", "--date", "2026-09-16");
     expect(day.status).toBe(0);
-    expect(day.stdout).toStartWith("Daily/2026-09-16.md");
+    expect(day.stdout.startsWith("Daily/2026-09-16.md")).toBe(true);
     const dry = run("journal", "append", "day", "- a bullet", "--date", "2026-09-16", "--dry-run");
     expect(dry.status).toBe(0);
     expect(dry.stdout).toContain("+- a bullet");
@@ -168,7 +168,7 @@ describe("the bundled journal", () => {
     expect(run("journal", "--help").stdout).toContain("usage: tsuzuri journal <period>");
     const help = JSON.parse(run("help", "--json").stdout) as { extensions: { name: string; operation: string }[] };
     expect(help.extensions.map((command) => command.name)).toEqual(["journal", "journal append"]);
-    expect(spawnSync("bun", [CLI, "--vault", copyVault(), "journal", "day"], { encoding: "utf8" }).status).toBe(2);
+    expect(spawnSync("node", [CLI, "--vault", copyVault(), "journal", "day"], { encoding: "utf8" }).status).toBe(2);
   });
 });
 
@@ -195,7 +195,7 @@ describe("a vault's own extension", () => {
     const root = helloVault();
     const config = mkdtempSync(join(tmpdir(), "tsuzuri-xdg-"));
     const run = (env: Record<string, string>, ...args: string[]) =>
-      spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8", env: { ...process.env, ...env } });
+      spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8", env: { ...process.env, ...env } });
     const skipped = run({ XDG_CONFIG_HOME: config }, "hello", "hi");
     expect(skipped.status).toBe(2);
     expect(skipped.stderr).toContain("skipped extensions .tsuzuri/hello.js");

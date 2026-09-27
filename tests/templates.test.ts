@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   captureInputFromMarkdown,
@@ -9,10 +9,11 @@ import {
   UnsupportedError,
   Vault,
 } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
 const NOW = new Date(2026, 8, 24, 19, 5);
-const KEPANO = join(import.meta.dir, "vaults", "kepano-obsidian");
+const KEPANO = join(import.meta.dirname, "vaults", "kepano-obsidian");
 const kepanoPresent = existsSync(KEPANO) && readdirSync(KEPANO).length > 0;
 /** A note's frontmatter, parsed through the prelude's YAML reading, and the text after it. */
 function splitFrontmatter(text: string): { data: Record<string, unknown>; body: string } {
@@ -44,6 +45,27 @@ describe("template settings", () => {
 });
 
 describe("new", () => {
+  test("routes each type with a filename pattern", async () => {
+    const root = copyVault();
+    const vault = new Vault(root, {
+      config: { types: { book: { folder: "Books", filename: "{{slug}}-{{date:YYYY}}" } } },
+    });
+    const result = await vault.create("Book", "The Left Hand of Darkness", { now: NOW, dryRun: true });
+    expect(result.path).toBe("Books/the-left-hand-of-darkness-2026.md");
+    expect(result.content).toContain("# The Left Hand of Darkness");
+  });
+
+  test("code options override one route setting without losing the file's folder", async () => {
+    const root = copyVault();
+    writeFileSync(
+      join(root, "tsuzuri.toml"),
+      '[templates]\nfolder = "Templates"\n[types.book]\nfolder = "Books"\nfilename = "{{title}}"\n',
+    );
+    const vault = new Vault(root, { config: { types: { Book: { filename: "{{slug}}" } } } });
+    const result = await vault.create("book", "A New Book", { now: NOW, dryRun: true });
+    expect(result.path).toBe("Books/a-new-book.md");
+  });
+
   test("creates a note from the fixture's template, placed and checked as capture does", async () => {
     const root = copyVault();
     const vault = new Vault(root);
@@ -58,12 +80,11 @@ describe("new", () => {
 
   test("applies the vault's capture rules, and adds tags", async () => {
     const vault = new Vault(copyVault(), {
-      config: { capture: { folder: "queue", filename: "slug", tag_style: "kebab", properties: ["title", "tags"] } },
+      config: { capture: { folder: "queue", filename: "{{slug}}" }, tags: { style: "kebab" } },
     });
     const result = await vault.create("book", "The Left Hand of Darkness", { now: NOW, tags: ["Science Fiction"] });
     expect(result.path).toBe("queue/the-left-hand-of-darkness.md");
     expect(splitFrontmatter(result.content).data).toMatchObject({
-      title: "The Left Hand of Darkness",
       tags: ["reading", "science-fiction"],
     });
   });
@@ -82,15 +103,64 @@ describe("new", () => {
       join(root, "Templates", "Note.md"),
       '---\ntitle: "{{title}}"\ntags:\n  - idea\nsource: "{{date}}"\nkind: note\n---\n\nbody\n',
     );
-    const vault = new Vault(root, { config: { capture: { folder: "Inbox", properties: ["created"] } } });
+    const vault = new Vault(root, { config: { capture: { folder: "Inbox" } } });
     const { content } = await vault.create("note", "Dune", { now: NOW, dryRun: true });
     expect(splitFrontmatter(content).data).toEqual({
-      created: "2026-09-24",
       title: "Dune",
       tags: ["idea"],
       source: "2026-09-24",
       kind: "note",
     });
+  });
+});
+
+describe("capture template", () => {
+  test("finds templates/capture.md without configuration", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tsuzuri-capture-type-"));
+    try {
+      mkdirSync(join(root, "templates"));
+      writeFileSync(join(root, "templates", "capture.md"), "---\nkind: capture\n---\n\n# {{title}}\n");
+      const { path, content } = await new Vault(root).capture({ text: "An idea", now: NOW }, { dryRun: true });
+      expect(path).toBe("An idea.md");
+      expect(content).toContain("kind: capture");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("adds template frontmatter and body while keeping the captured text", async () => {
+    const root = copyVault();
+    writeFileSync(
+      join(root, "Templates", "capture.md"),
+      '---\ntitle: "{{title}}"\ncreated: "{{date:YYYY-MM-DD HH:mm}}"\nkind: capture\n---\n\n# {{title}}\n',
+    );
+    const vault = new Vault(root, {
+      config: { types: { capture: { folder: "Queue", filename: "{{slug}}" } } },
+    });
+    const result = await vault.capture({ text: "An idea\nSome detail", now: NOW }, { dryRun: true });
+    expect(result.path).toBe("Queue/an-idea.md");
+    expect(splitFrontmatter(result.content).data).toMatchObject({
+      title: "An idea",
+      created: "2026-09-24 19:05",
+      kind: "capture",
+    });
+    expect(result.content).toContain("# An idea\n\nAn idea\nSome detail");
+  });
+
+  test("preserves unquoted title placeholders and deliberately blank fields", async () => {
+    const root = copyVault();
+    writeFileSync(
+      join(root, "Templates", "capture.md"),
+      "---\ntitle: {{title}}\ntags:\nsource:\nkind: capture\n---\n\n# {{title}}\n",
+    );
+    const { content } = await new Vault(root).capture({ text: "Plan: Q4", now: NOW }, { dryRun: true });
+    expect(splitFrontmatter(content).data).toMatchObject({
+      title: "Plan: Q4",
+      tags: null,
+      source: null,
+      kind: "capture",
+    });
+    expect(content).toContain("tags:\nsource:\nkind: capture");
   });
 });
 

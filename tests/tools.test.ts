@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPERATIONS, TsuzuriError, Vault } from "tsuzuri";
 import { agentTools, TOOLS, ToolInputError, validateInput } from "tsuzuri/tools";
+import { describe, expect, test } from "vitest";
 import { copyVault, FIXTURE } from "./git.ts";
 
 const tool = (name: string) => {
@@ -78,6 +78,28 @@ describe("tool definitions", () => {
     const moved = await run("tsuzuri_move", { note: "Working memory", to: "Topics/Short-term memory.md" });
     expect(moved).toMatchObject({ written: true, rewritten: [{ path: "Topics/Cognitive load.md" }] });
   });
+
+  test("capture and new tools use the vault's templates and type routes", async () => {
+    const root = copyVault();
+    writeFileSync(
+      join(root, "Templates", "capture.md"),
+      "---\nkind: capture\nsource: https://example.com/template\n---\n\n# {{title}}\n",
+    );
+    const vault = new Vault(root, {
+      config: { types: { capture: { folder: "Queue", filename: "{{slug}}" }, book: { folder: "Books" } } },
+    });
+    const captured = (await call(vault, "tsuzuri_capture", { text: "An idea", dryRun: true })) as {
+      path: string;
+      content: string;
+    };
+    expect(captured.path).toBe("Queue/an-idea.md");
+    expect(captured.content).toContain("kind: capture");
+    expect(captured.content).toContain("source: https://example.com/template");
+    const created = (await call(vault, "tsuzuri_new", { type: "book", title: "Dune", dryRun: true })) as {
+      path: string;
+    };
+    expect(created.path).toBe("Books/Dune.md");
+  });
 });
 
 describe("validateInput", () => {
@@ -102,6 +124,24 @@ describe("validateInput", () => {
 });
 
 describe("running tools", () => {
+  test("read tools page in the same order as SDK calls", async () => {
+    const vault = new Vault(FIXTURE);
+    expect(await call(vault, "tsuzuri_search", { query: "cognitive load", offset: 1, limit: 2 })).toEqual(
+      await vault.search("cognitive load", { offset: 1, limit: 2 }),
+    );
+    expect(await call(vault, "tsuzuri_find", { query: "o", offset: 1, limit: 2 })).toEqual(
+      await vault.suggest("o", { offset: 1, limit: 2 }),
+    );
+    expect(await call(vault, "tsuzuri_grep", { pattern: "memory", offset: 1 })).toEqual(
+      await vault.grep("memory", { fixed: true, offset: 1 }),
+    );
+    expect(await call(vault, "tsuzuri_list", { offset: 1, limit: 2 })).toEqual(
+      await vault.list({ offset: 1, limit: 2 }),
+    );
+    expect(() => validateInput(tool("tsuzuri_search"), { query: "x", offset: -1 })).toThrow(ToolInputError);
+    expect(validateInput(tool("tsuzuri_list"), { offset: 0 })).toBeDefined();
+  });
+
   test("reads go through the SDK", async () => {
     const vault = new Vault(copyVault());
     expect(await call(vault, "tsuzuri_get", { note: "clt", lines: "1:2" })).toMatchObject({ start: 1, end: 2 });
@@ -136,8 +176,8 @@ describe("running tools", () => {
 });
 
 describe("the tsuzuri-tools command", () => {
-  const CLI = join(import.meta.dir, "..", "src", "tools-cli.ts");
-  const run = (...args: string[]) => spawnSync("bun", [CLI, ...args], { encoding: "utf8" });
+  const CLI = join(import.meta.dirname, "..", "src", "tools-cli.ts");
+  const run = (...args: string[]) => spawnSync("node", [CLI, ...args], { encoding: "utf8" });
 
   test("prints the definitions, the SDK's without run", () => {
     const { status, stdout } = run("--json");

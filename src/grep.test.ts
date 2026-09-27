@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { grepPattern } from "./grep.ts";
 import { formatGrep } from "./index.ts";
 

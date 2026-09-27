@@ -1,15 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copyVault } from "./git.ts";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { copyVault, FIXTURE } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 
 function run(...args: string[]): { code: number; stdout: string; stderr: string } {
-  const result = Bun.spawnSync(["bun", CLI, "--vault", FIXTURE, ...args], { stdout: "pipe", stderr: "pipe" });
-  return { code: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+  const result = spawnSync("node", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
+  return { code: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
 }
 
 describe("cli", () => {
@@ -26,19 +26,19 @@ describe("cli", () => {
     for (const toml of ["capture = [\n", '[journal.day]\nformat = "YYYY-MM-DD"\n']) {
       const root = mkdtempSync(join(tmpdir(), "tsuzuri-badtoml-"));
       writeFileSync(join(root, "tsuzuri.toml"), toml);
-      const result = Bun.spawnSync(["bun", CLI, "--vault", root, "list"], { stderr: "pipe" });
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr.toString()).toStartWith("tsuzuri: tsuzuri.toml: ");
-      expect(result.stderr.toString().trim().split("\n")).toHaveLength(1);
+      const result = spawnSync("node", [CLI, "--vault", root, "list"], { encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(result.stderr.startsWith("tsuzuri: tsuzuri.toml: ")).toBe(true);
+      expect(result.stderr.trim().split("\n")).toHaveLength(1);
     }
   });
 
   test("dry-runs a capture from stdin", () => {
-    const result = Bun.spawnSync(["bun", CLI, "--vault", FIXTURE, "capture", "--dry-run", "--json"], {
-      stdin: new TextEncoder().encode("- from stdin\n"),
-      stdout: "pipe",
+    const result = spawnSync("node", [CLI, "--vault", FIXTURE, "capture", "--dry-run", "--json"], {
+      input: "- from stdin\n",
+      encoding: "utf8",
     });
-    expect(JSON.parse(result.stdout.toString())).toMatchObject({ path: "Inbox/from stdin.md", written: false });
+    expect(JSON.parse(result.stdout)).toMatchObject({ path: "Inbox/from stdin.md", written: false });
   });
 
   test("exits 1 for a missing note and 2 for bad usage", () => {
@@ -77,6 +77,25 @@ describe("cli get by line", () => {
 });
 
 describe("cli output shapes", () => {
+  test("--offset pages search, find, grep, and list without changing their order", () => {
+    const cases = [
+      ["search", "cognitive load", "--limit", "2"],
+      ["find", "o", "--limit", "2"],
+      ["grep", "memory"],
+      ["list", "--sort", "path", "--limit", "2"],
+    ];
+    for (const [command, ...args] of cases) {
+      const fullArgs = args.filter((arg) => arg !== "--limit" && arg !== "2");
+      const all = JSON.parse(run(command as string, ...fullArgs, "--json").stdout) as unknown[];
+      const page = run(command as string, ...args, "--offset", "1", "--json");
+      expect(page.code, `${command}: ${page.stderr}`).toBe(0);
+      expect(JSON.parse(page.stdout)).toEqual(all.slice(1, command === "grep" ? undefined : 3));
+    }
+    expect(run("list", "--offset=abc").code).toBe(2);
+    expect(run("list", "--offset=-1").code).toBe(2);
+    expect(run("get", "Home", "--offset", "1").code).toBe(2);
+  }, 20_000);
+
   test("--fields keeps the named fields, in JSON or as tab-separated text", () => {
     const json = run("list", "--type", "person", "--fields", "path,born", "--json");
     expect(JSON.parse(json.stdout)).toEqual([
@@ -129,7 +148,7 @@ describe("errors under --json", () => {
     const { code, error } = errorOf("get", "cognitive laod");
     expect(code).toBe(1);
     expect(error.name).toBe("NotFoundError");
-    expect(error.message).toStartWith('no note matches "cognitive laod"');
+    expect(error.message.startsWith('no note matches "cognitive laod"')).toBe(true);
     expect(error.suggestions[0]).toBe("Topics/Cognitive load.md");
   });
 
@@ -151,16 +170,16 @@ describe("help", () => {
     const root = copyVault();
     for (const { name, example } of help().commands) {
       const words = [...example.matchAll(/"([^"]*)"|(\S+)/g)].map((match) => match[1] ?? match[2] ?? "").slice(1);
-      const result = Bun.spawnSync(["bun", CLI, "--vault", root, ...words], { stdout: "pipe", stderr: "pipe" });
-      expect(result.exitCode, `${name}: ${result.stderr.toString()}`).not.toBe(2);
+      const result = spawnSync("node", [CLI, "--vault", root, ...words], { encoding: "utf8" });
+      expect(result.status, `${name}: ${result.stderr}`).not.toBe(2);
     }
-  });
+  }, 20_000);
 
   test("gives one command's help for <command> --help and help <command>", () => {
     const direct = run("get", "--help");
     expect(direct.code).toBe(0);
     expect(direct.stdout).toBe(run("help", "get").stdout);
-    expect(direct.stdout).toStartWith("usage: tsuzuri get <note>");
+    expect(direct.stdout.startsWith("usage: tsuzuri get <note>")).toBe(true);
     expect(direct.stdout).toContain("--lines <a:b>");
     expect(direct.stdout).not.toContain("--limit");
     expect(run("help", "prop").stdout).toContain("usage: tsuzuri prop set");
@@ -175,7 +194,7 @@ describe("help", () => {
   });
 
   test("docs/cli.md names every command and each of its options, and nothing else", () => {
-    const page = readFileSync(join(import.meta.dir, "..", "docs", "cli.md"), "utf8");
+    const page = readFileSync(join(import.meta.dirname, "..", "docs", "cli.md"), "utf8");
     const sections = new Map(
       page
         .split(/^### /m)
@@ -190,7 +209,7 @@ describe("help", () => {
   });
 
   test("the skill names only commands and options the CLI takes", () => {
-    const skill = readFileSync(join(import.meta.dir, "..", "skills", "tsuzuri", "SKILL.md"), "utf8");
+    const skill = readFileSync(join(import.meta.dirname, "..", "skills", "tsuzuri", "SKILL.md"), "utf8");
     const commands = new Map(help().commands.map((command) => [command.name, command] as const));
     const global = ["--json", "--vault", "--format", "--help", "--version"];
     // A code span naming a command: its first two words when they are one, such as `prop set`, else its first.
@@ -211,6 +230,6 @@ describe("help", () => {
   test("refuses an option the command does not take", () => {
     const { code, stderr } = run("get", "Home", "--limit", "3");
     expect(code).toBe(2);
-    expect(stderr).toStartWith("tsuzuri: get does not take --limit; run tsuzuri help get");
+    expect(stderr.startsWith("tsuzuri: get does not take --limit; run tsuzuri help get")).toBe(true);
   });
 });

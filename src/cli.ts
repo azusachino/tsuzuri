@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
 import { parse as parseToml } from "smol-toml";
-import pkg from "../package.json" with { type: "json" };
+import pkg from "tsuzuri/package.json" with { type: "json" };
 // The CLI uses only the public SDK surface, the same one library consumers import.
 import {
   captureInputFromMarkdown,
@@ -66,7 +66,7 @@ const OPTIONS = {
   vault: {
     type: "string",
     value: "<dir>",
-    summary: "vault root (default: $TSUZURI_VAULT, then the current directory)",
+    summary: "vault root (default: $TSUZURI_VAULT, then nearest ancestor with tsuzuri.toml, then cwd)",
   },
   json: { type: "boolean", summary: "machine-readable output and errors, the same as --format json" },
   format: { type: "string", value: "<text|json|paths>", summary: "paths prints one path per line, for xargs and fzf" },
@@ -94,6 +94,7 @@ const OPTIONS = {
   sort: { type: "string", value: "<modified|created|title|path>", summary: "order; notes without the value sort last" },
   desc: { type: "boolean", summary: "sort descending" },
   limit: { type: "string", value: "<n>", summary: "most results" },
+  offset: { type: "string", value: "<n>", summary: "skip this many results in the same order" },
   "max-chars": { type: "string", value: "<n>", summary: "truncate the note body" },
   lines: {
     type: "string",
@@ -144,6 +145,30 @@ const SECTION: readonly OptionName[] = ["heading", "create-heading", "level"];
 
 const COMMANDS: readonly CommandSpec[] = [
   {
+    name: "types",
+    operation: "types",
+    args: "",
+    summary: "list template-backed note types and their routes",
+    options: [],
+    example: "tsuzuri types --json",
+  },
+  {
+    name: "check",
+    operation: "check",
+    args: "<note>",
+    summary: "check a note's template keys and title/tag rules; exit 1 when it fails",
+    options: [],
+    example: 'tsuzuri check "Working memory" --json',
+  },
+  {
+    name: "config",
+    operation: "config",
+    args: "",
+    summary: "show effective settings, their sources, and the vault root",
+    options: [],
+    example: "tsuzuri config --json",
+  },
+  {
     name: "get",
     operation: "get",
     args: "<note>",
@@ -156,7 +181,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "search",
     args: "<query...>",
     summary: "rank notes by relevance (BM25; CJK matches as substrings)",
-    options: [...FILTERS, "limit", "fields"],
+    options: [...FILTERS, "limit", "offset", "fields"],
     example: "tsuzuri search cognitive load --limit 5 --json",
   },
   {
@@ -164,7 +189,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "grep",
     args: "<pattern>",
     summary: "matching lines as path:line:text, like rg -n (smart case)",
-    options: [...FILTERS, "fixed-strings", "context"],
+    options: [...FILTERS, "fixed-strings", "context", "offset"],
     example: 'tsuzuri grep -F "working memory" -C 2',
   },
   {
@@ -172,7 +197,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "suggest",
     args: "<query...>",
     summary: "fuzzy match over paths, titles, and aliases, ranked as fzf ranks",
-    options: [...FILTERS, "limit", "fields"],
+    options: [...FILTERS, "limit", "offset", "fields"],
     example: "tsuzuri find cogload --json",
   },
   {
@@ -180,7 +205,7 @@ const COMMANDS: readonly CommandSpec[] = [
     operation: "list",
     args: "",
     summary: "notes matching the filters, optionally sorted",
-    options: [...FILTERS, "sort", "desc", "limit", "fields"],
+    options: [...FILTERS, "sort", "desc", "limit", "offset", "fields"],
     example: "tsuzuri list --tag psychology --sort modified --desc --limit 10",
   },
   {
@@ -255,6 +280,15 @@ const COMMANDS: readonly CommandSpec[] = [
     writes: true,
     options: ["title", "source", "tag", "file", "dry-run"],
     example: 'tsuzuri capture --tag reading --source https://example.com "Read: how agents plan" --dry-run',
+  },
+  {
+    name: "init",
+    operation: "init",
+    args: "",
+    summary: "write starter tsuzuri.toml and templates/capture.md without overwriting",
+    writes: true,
+    options: ["dry-run"],
+    example: "tsuzuri init --dry-run --json",
   },
   {
     name: "new",
@@ -452,6 +486,15 @@ function count(name: string, value: string | undefined): number | undefined {
   return parsed;
 }
 
+function offset(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed)) {
+    throw new UsageError("--offset must be a non-negative integer");
+  }
+  return parsed;
+}
+
 /** Text for a write: the arguments joined, or stdin when there are none. */
 async function inputText(words: string[]): Promise<string> {
   const value = words.length > 0 ? words.join(" ") : await text(process.stdin);
@@ -560,7 +603,17 @@ function trustedByUser(root: string): boolean {
 
 /** The vault with the extensions it lists, saying on stderr which it skipped and how to load them. */
 async function openVault(dir: string | undefined, trust: boolean): Promise<Vault> {
-  const root = resolve(dir ?? process.env.TSUZURI_VAULT ?? process.cwd());
+  const explicit = dir ?? process.env.TSUZURI_VAULT;
+  let root = resolve(explicit || process.cwd());
+  if (!explicit) {
+    for (let at = root; ; at = resolve(at, "..")) {
+      if (existsSync(join(at, "tsuzuri.toml"))) {
+        root = at;
+        break;
+      }
+      if (at === resolve(at, "..")) break;
+    }
+  }
   const vault = await Vault.open(root, { trust: trust || trustedByUser(root) });
   if (vault.skipped.length > 0) {
     const skipped = vault.skipped.map((skip) => `${skip.extension} (${skip.reason})`).join(", ");
@@ -752,6 +805,38 @@ async function main(): Promise<void> {
   };
 
   switch (command) {
+    case "types": {
+      if (args.length > 0) throw new UsageError("types takes no arguments");
+      const types = await vault.types();
+      return emit(types, () =>
+        types.map((item) => `${item.type}\t${item.template}\t${item.folder}\t${item.filename}`).join("\n"),
+      );
+    }
+    case "check": {
+      const result = await vault.check(one(args, "note"));
+      emit(result, () => [result.path, ...result.missing.map((key) => `missing: ${key}`), ...result.errors].join("\n"));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    case "config": {
+      if (args.length > 0) throw new UsageError("config takes no arguments");
+      const result = vault.config();
+      return emit(result, () =>
+        [
+          result.root,
+          ...result.settings.map(({ name, value, source }) => `${name}\t${JSON.stringify(value)}\t${source}`),
+        ].join("\n"),
+      );
+    }
+    case "init": {
+      if (args.length > 0) throw new UsageError("init takes no arguments");
+      const result = vault.init({ dryRun: opts["dry-run"] });
+      return emit(result, () =>
+        result.files
+          .map(({ path, content }) => `${path}${result.written ? "" : " (dry run)"}\n${result.written ? "" : content}`)
+          .join("\n"),
+      );
+    }
     case "get": {
       const around = opts.around === undefined ? undefined : aroundTarget(opts.around);
       if (around?.ref && args.length > 0)
@@ -775,6 +860,7 @@ async function main(): Promise<void> {
           ...filter,
           fixed: opts["fixed-strings"],
           context: opts.context === undefined ? undefined : lineCount(opts.context),
+          offset: offset(opts.offset),
         });
       } catch (error) {
         if (error instanceof SyntaxError) throw new UsageError(`invalid pattern: ${error.message}`);
@@ -784,7 +870,11 @@ async function main(): Promise<void> {
     }
     case "search": {
       if (args.length === 0) throw new UsageError("search needs a query");
-      const hits = await vault.search(args.join(" "), { ...filter, limit: count("limit", opts.limit) });
+      const hits = await vault.search(args.join(" "), {
+        ...filter,
+        limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
+      });
       return emitNotes(vault, hits, hits, () =>
         hits.length === 0
           ? "no matches"
@@ -793,7 +883,11 @@ async function main(): Promise<void> {
     }
     case "find": {
       if (args.length === 0) throw new UsageError("find needs a query");
-      const hits = await vault.suggest(args.join(" "), { ...filter, limit: count("limit", opts.limit) });
+      const hits = await vault.suggest(args.join(" "), {
+        ...filter,
+        limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
+      });
       return emitNotes(vault, hits, hits, () =>
         hits.length === 0 ? "no matches" : hits.map((hit) => `${hit.score}\t${hit.path}\t${hit.title}`).join("\n"),
       );
@@ -813,6 +907,7 @@ async function main(): Promise<void> {
         sort: sort as (typeof SORT_KEYS)[number] | undefined,
         desc: opts.desc,
         limit: count("limit", opts.limit),
+        offset: offset(opts.offset),
       });
       return emitNotes(vault, notes, notes, () => notes.map((note) => `${note.path}\t${note.title}`).join("\n"));
     }

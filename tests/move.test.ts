@@ -1,13 +1,13 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type MoveResult, PermissionError, Vault, WriteConflictError } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
-const KEPANO = join(import.meta.dir, "vaults", "kepano-obsidian");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
+const KEPANO = join(import.meta.dirname, "vaults", "kepano-obsidian");
 const kepanoPresent = existsSync(KEPANO) && readdirSync(KEPANO).length > 0;
 
 /** Each note's links in order, as the path each resolves to, or its status when it resolves to no one note. */
@@ -199,7 +199,7 @@ describe("move", () => {
 
   test("runs from the CLI, printing each diff on a dry run", () => {
     const root = copyVault();
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
     const dry = run("move", "Working memory", "Topics/Short-term memory.md", "--dry-run");
     expect(dry.status).toBe(0);
     expect(dry.stdout).toContain("+- Background: [[Short-term memory]]");

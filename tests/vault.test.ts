@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LineRangeError, NotFoundError, Vault } from "tsuzuri";
+import { InputError, LineRangeError, NotFoundError, Vault } from "tsuzuri";
+import { describe, expect, test } from "vitest";
+import { copyVault, FIXTURE } from "./git.ts";
 
-export const FIXTURE = join(import.meta.dir, "fixtures", "vault");
 const vault = new Vault(FIXTURE);
 
 describe("scanning", () => {
@@ -17,6 +17,24 @@ describe("scanning", () => {
   test("uses the file name as the title when there is no title property", async () => {
     expect((await vault.find("Home")).title).toBe("Home");
     expect((await vault.find("乌龙茶")).path).toBe("Notes/乌龙茶.md");
+  });
+
+  test("uses a first H1 after frontmatter, with property then filename precedence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tsuzuri-heading-title-"));
+    try {
+      writeFileSync(join(root, "01.md"), "---\ntags: [docs]\n---\n\n# Getting started\n\nDetails.\n");
+      writeFileSync(join(root, "02.md"), "---\ntitle: Explicit title\n---\n\n# Different heading\n");
+      writeFileSync(join(root, "03.md"), "Introduction\n\n# Later heading\n");
+      writeFileSync(join(root, "04.md"), "## Subheading\n");
+      const local = new Vault(root);
+      expect((await local.find("01.md")).title).toBe("Getting started");
+      expect((await local.find("02.md")).title).toBe("Explicit title");
+      expect((await local.find("03.md")).title).toBe("03");
+      expect((await local.find("04.md")).title).toBe("04");
+      expect((await local.find("Getting started")).path).toBe("01.md");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("rejects a missing vault", () => {
@@ -91,6 +109,27 @@ describe("list", () => {
     ]);
     expect((await vault.list({ tag: "psychology/memory", under: "Topics" })).length).toBe(2);
     expect((await vault.list({ status: "draft" })).map((note) => note.path)).toEqual(["Inbox/Existing idea.md"]);
+  });
+});
+
+describe("paging", () => {
+  test("offset slices each command's existing order", async () => {
+    const listed = await vault.list({ sort: "path" });
+    expect(await vault.list({ sort: "path", offset: 2, limit: 3 })).toEqual(listed.slice(2, 5));
+    const searched = await vault.search("cognitive load", { limit: 100 });
+    expect(await vault.search("cognitive load", { offset: 1, limit: 2 })).toEqual(searched.slice(1, 3));
+    const found = await vault.suggest("o", { limit: 100 });
+    expect(await vault.suggest("o", { offset: 2, limit: 3 })).toEqual(found.slice(2, 5));
+    const lines = await vault.grep("memory");
+    expect(await vault.grep("memory", { offset: 2 })).toEqual(lines.slice(2));
+    expect(await vault.list({ offset: 0 })).toEqual(await vault.list());
+  });
+
+  test("rejects negative and fractional SDK offsets", async () => {
+    await expect(vault.list({ offset: -1 })).rejects.toThrow(InputError);
+    await expect(vault.search("memory", { offset: 0.5 })).rejects.toThrow(InputError);
+    await expect(vault.suggest("memory", { offset: -1 })).rejects.toThrow(InputError);
+    await expect(vault.grep("memory", { offset: -1 })).rejects.toThrow(InputError);
   });
 });
 
@@ -219,6 +258,26 @@ describe("links", () => {
 });
 
 describe("nav", () => {
+  test("uses README.md as the folder index, with index.md taking precedence", async () => {
+    const root = copyVault();
+    try {
+      mkdirSync(join(root, "Guides"));
+      writeFileSync(join(root, "Guides", "README.md"), "# Guides for readers\n\nWelcome.\n");
+      writeFileSync(join(root, "Guides", "Topic.md"), "# A topic\n");
+      const local = new Vault(root);
+      expect((await local.nav()).folders).toContainEqual({ path: "Guides", title: "Guides for readers", notes: 2 });
+      const guides = await local.nav("Guides");
+      expect(guides.index).toMatchObject({ path: "Guides/README.md", title: "Guides for readers" });
+      expect(guides.notes.map((note) => note.path)).toEqual(["Guides/Topic.md"]);
+      writeFileSync(join(root, "Guides", "index.md"), "# Canonical index\n");
+      local.reload();
+      expect((await local.nav("Guides")).index?.path).toBe("Guides/index.md");
+      expect((await local.nav()).folders.find((folder) => folder.path === "Guides")?.title).toBe("Canonical index");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("shows the root folders and notes", async () => {
     const root = await vault.nav();
     expect(root.index).toBeUndefined();
@@ -245,6 +304,39 @@ describe("nav", () => {
 });
 
 describe("search", () => {
+  test("keeps paths, BM25 scores, and snippets from the uncached calculation", async () => {
+    const cognitive = await vault.search("cognitive load");
+    expect(cognitive.map(({ path, score }) => [path, score])).toEqual([
+      ["Topics/Cognitive load.md", 5.207],
+      ["Topics/index.md", 2.854],
+      ["Home.md", 2.205],
+      ["Topics/Working memory.md", 1.942],
+    ]);
+    expect(cognitive[0]?.snippet).toBe(
+      "Cognitive load theory explains why working memory limits learning. - Background: [[Topics/Working memory]] and [[Working memory|wm]]. - Folder index: [[index]…",
+    );
+    expect((await vault.search("student of Socrates")).map(({ path, score }) => [path, score])).toEqual([
+      ["People/Plato.md", 8.712],
+      ["Topics/History/Timeline.md", 2.442],
+    ]);
+    expect((await vault.search("乌龙茶")).map(({ path, score, snippet }) => [path, score, snippet])).toEqual([
+      ["Notes/乌龙茶.md", 8.335, "今天喝了乌龙茶，很好喝。乌龙茶适合下午。"],
+    ]);
+  });
+
+  test("rebuilds search statistics with the scan after a reload", async () => {
+    const root = copyVault();
+    try {
+      const local = new Vault(root);
+      expect(await local.search("newtoken")).toEqual([]);
+      writeFileSync(join(root, "Home.md"), "# Home\n\nnewtoken appears here.\n");
+      local.reload();
+      expect((await local.search("newtoken")).map((hit) => hit.path)).toEqual(["Home.md"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("ranks a title match first", async () => {
     const hits = await vault.search("cognitive load");
     expect(hits[0]?.path).toBe("Topics/Cognitive load.md");

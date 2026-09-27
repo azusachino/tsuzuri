@@ -6,20 +6,20 @@ Every `tsuzuri` command, its options, and what `--json` returns. `tsuzuri help <
 
 | Option | Meaning |
 | --- | --- |
-| `--vault <dir>` | vault root (default: $TSUZURI_VAULT, then the current directory) |
+| `--vault <dir>` | vault root (default: $TSUZURI_VAULT, then nearest ancestor with tsuzuri.toml, then cwd) |
 | `--json` | machine-readable output and errors, the same as --format json |
 | `--format <text\|json\|paths>` | paths prints one path per line, for xargs and fzf |
 | `--trust` | run the extension modules the vault itself lists (bundled tsuzuri: extensions need no trust) |
 | `-h, --help` | show help, for one command when one is given |
 | `-v, --version` | show the version |
 
-The vault is `--vault`, else `$TSUZURI_VAULT`, else the current directory. A command refuses an option it does not take. A text argument that starts with a dash and a space, or a negative number, is text rather than an option; anything else starting with a dash goes after `--`.
+The vault is `--vault`, else `$TSUZURI_VAULT`, else the nearest ancestor of the current directory holding `tsuzuri.toml`. Without that file anywhere above, it uses the current directory. A command refuses an option it does not take. A text argument that starts with a dash and a space, or a negative number, is text rather than an option; anything else starting with a dash goes after `--`.
 
 A vault's extensions add commands of their own, such as the bundled journal's `journal` and `journal append`; `tsuzuri help` lists them, and [extensions](extensions.md) describes them. They load when a vault lists them in `tsuzuri.toml`; a module the vault itself holds runs only with `--trust`, or when the vault's root is in `vaults` in `$XDG_CONFIG_HOME/tsuzuri/trust.toml`.
 
 ## output and errors
 
-Text output is for people. With `--json`, stdout is one JSON value, shaped as each command below says. Commands that return notes share one summary: `path`, `title`, `type`, `status`, `tags`, `created`, and `modified`, the optional ones only when set. `--fields a,b` keeps only the named fields, a summary field or any frontmatter key, `null` when absent, and `--format paths` prints one path per line.
+Text output is for people. With `--json`, stdout is one JSON value, shaped as each command below says. Commands that return notes share one summary: `path`, `title`, `type`, `status`, `tags`, `created`, and `modified`, the optional ones only when set. The title comes from frontmatter, then a first H1, then the filename. `--fields a,b` keeps only the named fields, a summary field or any frontmatter key, `null` when absent, and `--format paths` prints one path per line.
 
 With `--json`, a failure prints one line on stderr, `{"error": {"name", "message", ...}}`, with the error's own fields: `suggestions` on `NotFoundError`.
 
@@ -30,6 +30,36 @@ With `--json`, a failure prints one line on stderr, `{"error": {"name", "message
 | 2 | bad usage: `UsageError` |
 
 ## reads
+
+### types
+
+`tsuzuri types`
+
+List each template-backed type with its template path, effective destination folder, and filename pattern. With `--json`, returns objects with `type`, `template`, `folder`, and `filename`.
+
+```sh
+tsuzuri types --json
+```
+
+### check
+
+`tsuzuri check <note>`
+
+Check for frontmatter keys declared by the note type's template and the vault's `[tags]` and `[titles]` rules. A note without a `type` property uses the capture template. With `--json`, returns `path`, `type`, `ok`, `missing`, and `errors`. Exits 1 when a check fails.
+
+```sh
+tsuzuri check "Working memory" --json
+```
+
+### config
+
+`tsuzuri config`
+
+Show the resolved vault root and effective settings, including loaded extension table values. Each setting has a `name`, `value`, and `source` (`options`, `tsuzuri.toml`, `default`, or both when the extension list is merged). With `--json`, returns `root` and `settings`.
+
+```sh
+tsuzuri config --json
+```
 
 ### get
 
@@ -65,6 +95,7 @@ Rank notes by relevance (BM25; CJK matches as substrings).
 | `--under <folder>` | only notes in this folder |
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: hits: the summary fields plus `score` and `snippet`.
@@ -88,6 +119,7 @@ Matching lines as path:line:text, like rg -n (smart case).
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `-F, --fixed-strings` | match the pattern as literal text |
 | `-C, --context <n>` | lines either side (get --around: 5 by default) |
+| `--offset <n>` | skip this many results in the same order |
 
 With `--json`: hits: `path`, `line`, `text`, and with `-C` the `before` and `after` lines.
 
@@ -109,6 +141,7 @@ Fuzzy match over paths, titles, and aliases, ranked as fzf ranks. Each word of t
 | `--under <folder>` | only notes in this folder |
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: suggestions: the summary fields plus `score` and the `matched` path, title, or alias.
@@ -133,6 +166,7 @@ Notes matching the filters, optionally sorted.
 | `--sort <modified\|created\|title\|path>` | order; notes without the value sort last |
 | `--desc` | sort descending |
 | `--limit <n>` | most results |
+| `--offset <n>` | skip this many results in the same order |
 | `--fields <a,b,...>` | only these fields: summary fields such as score, or any frontmatter key |
 
 With `--json`: summaries.
@@ -165,7 +199,7 @@ tsuzuri tags --json
 
 `tsuzuri nav [folder]`
 
-A folder's index note and headings, subfolders, and notes.
+A folder's `index.md` or `README.md` note and headings, subfolders, and notes. When both exist, `index.md` is the index.
 
 | Option | Meaning |
 | --- | --- |
@@ -276,13 +310,27 @@ tsuzuri help get
 
 ## writes
 
+### init
+
+`tsuzuri init`
+
+Write a commented starter `tsuzuri.toml` and `templates/capture.md`. Refuses to overwrite either file. `--dry-run` prints both proposed files without writing, even when they already exist. With `--json`, returns `files` (each path and content) and `written`.
+
+| Option | Meaning |
+| --- | --- |
+| `--dry-run` | show the result, a diff for edits, without writing |
+
+```sh
+tsuzuri init --dry-run --json
+```
+
 Every edit takes `--dry-run` for a unified diff, `--if-hash` to refuse a note changed since `get` returned that hash, and `capture` and `new` only create notes.
 
 ### capture
 
 `tsuzuri capture [text...]`
 
-Create a new note in the capture folder from text, --file, or stdin; never edits a note.
+Create a new note from text, --file, or stdin; never edits a note. A `templates/capture.md` template supplies frontmatter and headings when present. The capture route comes from `[capture]` or `[types.capture]`.
 
 | Option | Meaning |
 | --- | --- |
@@ -302,7 +350,7 @@ tsuzuri capture --tag reading --source https://example.com "Read: how agents pla
 
 `tsuzuri new <type> <title...>`
 
-Create a note from the vault's template for type, placed as capture places it.
+Create a note from `templates/<type>.md`, or the configured template folder. `[types.<type>]` may route it to a folder and filename pattern; otherwise it uses the capture route.
 
 | Option | Meaning |
 | --- | --- |

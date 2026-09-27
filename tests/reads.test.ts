@@ -1,15 +1,15 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NotFoundError, Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const run = (root: string, ...args: string[]) =>
-  spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+  spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
 
 const OUTLINED = [
   "---",

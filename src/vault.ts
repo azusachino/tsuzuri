@@ -1,6 +1,15 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, join, posix, resolve } from "node:path";
+import { basename, dirname, join, posix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import ignore from "ignore";
 import { parseDocument, stringify } from "yaml";
@@ -8,11 +17,14 @@ import {
   type CaptureInput,
   type CaptureOptions,
   type CaptureResult,
+  canonicalTag,
   capture,
   captureInputFromMarkdown,
+  captureTitle,
+  validTags,
 } from "./capture.ts";
 import { formatDate } from "./dateformat.ts";
-import { ConfigError, TsuzuriError } from "./errors.ts";
+import { ConfigError, InputError, TsuzuriError } from "./errors.ts";
 import { type Frontmatter, frontmatterRange, splitFrontmatter, stringList } from "./frontmatter.ts";
 import { fuzzyRank } from "./fuzzy.ts";
 import { type GrepHit, type GrepOptions, grep } from "./grep.ts";
@@ -30,7 +42,7 @@ import {
   PermissionError,
   vaultPath,
 } from "./operations.ts";
-import { rank } from "./search.ts";
+import { indexDocument, rank, type SearchDocument } from "./search.ts";
 import { findSection, headingsOf, SectionError, sectionContentEnd } from "./sections.ts";
 import {
   CONFIG_FILE,
@@ -42,6 +54,7 @@ import {
 } from "./settings.ts";
 import { countTags, noteTags, type TagCount, tagMatches } from "./tags.ts";
 import { renderTemplate, templateFor, templateNames } from "./templates.ts";
+import { lowercaseTitle } from "./title.ts";
 import {
   contentHash,
   splice,
@@ -93,6 +106,26 @@ export interface NoteContent extends NoteSummary {
   total?: number;
 }
 
+export interface TypeInfo {
+  type: string;
+  template: string;
+  folder: string;
+  filename: string;
+}
+
+export interface CheckResult {
+  path: string;
+  type: string;
+  ok: boolean;
+  missing: string[];
+  errors: string[];
+}
+
+export interface InitResult {
+  files: { path: string; content: string }[];
+  written: boolean;
+}
+
 /**
  * Options for `get`. Line numbers count from 1 at the top of the file, frontmatter included, as `rg -n`, editors,
  * and Git diffs count them.
@@ -128,6 +161,8 @@ export interface ListOptions {
   sort?: (typeof SORT_KEYS)[number];
   desc?: boolean;
   limit?: number;
+  /** Number of sorted results to skip before applying `limit`. */
+  offset?: number;
 }
 
 export interface OutgoingLink {
@@ -233,6 +268,7 @@ const SOURCES = new WeakMap<Extension, string>();
 /** The notes as last read, their link index, and the fingerprint `watch` compares. */
 interface Scan {
   notes: Note[];
+  search: Map<string, SearchDocument>;
   index: LinkIndex;
   fingerprint: string;
   /** Every note's resolved links, built on the first link query and dropped with the scan. */
@@ -433,22 +469,30 @@ export class Vault {
         return direction * left.localeCompare(right) || a.path.localeCompare(b.path);
       });
     }
-    return filter.limit === undefined ? notes : notes.slice(0, filter.limit);
+    const start = pageOffset(filter.offset);
+    return notes.slice(start, filter.limit === undefined ? undefined : start + filter.limit);
   }
 
-  async search(query: string, filter: Filter & { limit?: number } = {}): Promise<SearchHit[]> {
-    return rank(filtered(await this.reachable("search"), filter), query, filter.limit ?? 10).map(
-      ({ note, score, snippet }) => ({
+  async search(query: string, filter: Filter & { limit?: number; offset?: number } = {}): Promise<SearchHit[]> {
+    this.mask.check("search");
+    const scan = await this.load();
+    const visible = this.mask.scope("search").everywhere
+      ? scan.notes
+      : scan.notes.filter((note) => this.mask.reaches("search", note.path));
+    const docs = filtered(visible, filter).map((note) => scan.search.get(note.path) as SearchDocument);
+    const start = pageOffset(filter.offset);
+    return rank(docs, query, start + (filter.limit ?? 10))
+      .slice(start)
+      .map(({ note, score, snippet }) => ({
         ...summarize(note),
         score,
         snippet,
-      }),
-    );
+      }));
   }
 
   /** Lines matching a regular expression (or literal text with `fixed`), with ripgrep's smart case. */
   async grep(pattern: string, options: Filter & GrepOptions = {}): Promise<GrepHit[]> {
-    return grep(filtered(await this.reachable("grep"), options), pattern, options);
+    return grep(filtered(await this.reachable("grep"), options), pattern, options).slice(pageOffset(options.offset));
   }
 
   /** Every tag in the filtered notes with its note count, so a writer can reuse a tag instead of inventing one. */
@@ -583,7 +627,7 @@ export class Vault {
       if (
         existing.dev !== original.dev ||
         existing.ino !== original.ino ||
-        realpathSync(join(this.root, target)) !== realpathSync(join(this.root, note.path))
+        readdirSync(join(this.root, dirname(target))).includes(basename(target))
       ) {
         throw new WriteConflictError(`${target} exists; move does not overwrite`);
       }
@@ -707,11 +751,13 @@ export class Vault {
     );
   }
 
-  /** A folder's own `index.md`, its subfolders, and its direct notes: the vault's navigation before any search. */
+  /** A folder's own `index.md` or `README.md`, its subfolders, and its direct notes. */
   async nav(folder = ""): Promise<NavView> {
     const prefix = folderPrefix(folder);
     const notes = (await this.reachable("nav")).filter((note) => note.path.startsWith(prefix));
-    const indexNote = notes.find((note) => note.path === `${prefix}index.md`);
+    const indexNote =
+      notes.find((note) => note.path.toLowerCase() === `${prefix}index.md`.toLowerCase()) ??
+      notes.find((note) => note.path.toLowerCase() === `${prefix}readme.md`.toLowerCase());
     const folders = new Map<string, number>();
     const direct: NoteSummary[] = [];
     for (const note of notes) {
@@ -724,7 +770,7 @@ export class Vault {
         folders.set(child, (folders.get(child) ?? 0) + 1);
       }
     }
-    const titled = new Map(notes.map((note) => [note.path, note.title]));
+    const titled = new Map(notes.map((note) => [note.path.toLowerCase(), note.title]));
     return {
       folder: prefix.replace(/\/$/, ""),
       ...(indexNote
@@ -739,11 +785,131 @@ export class Vault {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([path, count]) => ({
           path,
-          title: titled.get(`${path}/index.md`) ?? posix.basename(path),
+          title:
+            titled.get(`${path}/index.md`.toLowerCase()) ??
+            titled.get(`${path}/readme.md`.toLowerCase()) ??
+            posix.basename(path),
           notes: count,
         })),
       notes: direct.sort((a, b) => a.path.localeCompare(b.path)),
     };
+  }
+
+  /** Template-backed types and their effective routes. */
+  async types(): Promise<TypeInfo[]> {
+    this.mask.check("types");
+    const settings = this.settings.templates;
+    if (!settings) return [];
+    const paths = (await this.reachable("types")).map((note) => note.path);
+    return [...new Set(templateNames(paths, settings.folder).map((name) => name.toLowerCase()))].sort().map((type) => ({
+      type,
+      template: templateFor(paths, settings.folder, type) as string,
+      folder: this.settings.types[type]?.folder ?? this.settings.capture.folder,
+      filename: this.settings.types[type]?.filename ?? this.settings.capture.filename,
+    }));
+  }
+
+  /** Check a note against its template's frontmatter keys and vault-wide title/tag rules. */
+  async check(ref: string): Promise<CheckResult> {
+    const note = await this.resolve("check", ref);
+    const type = note.type?.toLowerCase() ?? "capture";
+    const settings = this.settings.templates;
+    const visible = settings ? await this.reachable("check") : [];
+    const paths = visible.map((each) => each.path);
+    const template = settings && templateFor(paths, settings.folder, type);
+    const missing: string[] = [];
+    const errors: string[] = [];
+    if (!template) errors.push(`no template for type "${type}"`);
+    else {
+      const raw = (visible.find((each) => each.path === template) as Note).raw;
+      const expected = splitFrontmatter(raw).data;
+      for (const key of Object.keys(expected)) if (!(key in note.frontmatter)) missing.push(key);
+    }
+    const rules = this.settings.capture;
+    try {
+      validTags(note.tags, rules);
+    } catch (error) {
+      errors.push((error as Error).message);
+    }
+    if (rules.tagStyle === "kebab") {
+      for (const tag of note.tags) if (tag !== canonicalTag(tag)) errors.push(`tag "${tag}" is not kebab-case`);
+    }
+    if (rules.titleStyle === "lowercase" && note.title !== lowercaseTitle(note.title, new Set(rules.titleAllow))) {
+      errors.push(`title "${note.title}" does not follow [titles] case`);
+    }
+    return { path: note.path, type, ok: missing.length === 0 && errors.length === 0, missing, errors };
+  }
+
+  /** Effective core settings and where each value came from. */
+  config(): { root: string; settings: { name: string; value: unknown; source: string }[] } {
+    this.mask.check("config");
+    const { capture, templates, types, extensions, tables, sources } = this.settings;
+    const values: Record<string, unknown> = {
+      "capture.folder": capture.folder,
+      "capture.filename": capture.filename,
+      "tags.style": capture.tagStyle,
+      "tags.require": capture.requireTags,
+      "tags.reject": capture.rejectTags,
+      "titles.case": capture.titleStyle,
+      "titles.keep": capture.titleAllow,
+      "templates.folder": templates?.folder ?? null,
+      "templates.date_format": templates?.dateFormat ?? null,
+      "templates.time_format": templates?.timeFormat ?? null,
+      extensions,
+    };
+    for (const [type, route] of Object.entries(types)) {
+      values[`types.${type}.folder`] = route.folder;
+      values[`types.${type}.filename`] = route.filename;
+    }
+    const addTable = (name: string, value: unknown) => {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const entries = Object.entries(value);
+        if (entries.length === 0) values[name] = {};
+        for (const [key, nested] of entries) addTable(`${name}.${key}`, nested);
+      } else values[name] = value;
+    };
+    for (const [name, table] of Object.entries(tables)) addTable(name, table);
+    return {
+      root: this.root,
+      settings: Object.entries(values).map(([name, value]) => ({
+        name,
+        value,
+        source: sources[name] ?? sources[name.split(".")[0] as string] ?? "default",
+      })),
+    };
+  }
+
+  /** Prepare or write a starter config and capture template, refusing any existing target. */
+  init(options: { dryRun?: boolean } = {}): InitResult {
+    const files = [
+      {
+        path: CONFIG_FILE,
+        content:
+          '# tsuzuri vault settings\n# [capture]\n# folder = "Inbox"\n# filename = "{{title}}"\n\n# [tags]\n# style = "as-written"\n# require = false\n\n# [titles]\n# case = "as-written"\n\n[templates]\nfolder = "templates"\n',
+      },
+      {
+        path: "templates/capture.md",
+        content: '---\ntitle: "{{title}}"\ncreated: "{{date:YYYY-MM-DD}}"\ntags:\n---\n\n{{title}}\n',
+      },
+    ];
+    this.mask.check(
+      "init",
+      files.map((file) => file.path),
+    );
+    if (!options.dryRun) {
+      if (lstatSync(join(this.root, "templates"), { throwIfNoEntry: false })?.isSymbolicLink()) {
+        throw new WriteConflictError("templates is a symbolic link");
+      }
+      for (const file of files) {
+        if (lstatSync(join(this.root, file.path), { throwIfNoEntry: false })) {
+          throw new WriteConflictError(`${file.path} already exists`);
+        }
+      }
+      mkdirSync(join(this.root, "templates"), { recursive: true });
+      for (const file of files) writeFileSync(join(this.root, file.path), file.content, { flag: "wx" });
+      this.reload();
+    }
+    return { files, written: !options.dryRun };
   }
 
   /**
@@ -771,23 +937,58 @@ export class Vault {
       );
     }
     const now = options.now ?? new Date();
+    const styledTitle = captureTitle({ text: title, title }, this.settings.capture);
     const template = (notes.find((note) => note.path === path) as Note).raw;
-    const input = captureInputFromMarkdown(renderTemplate(template, title, now, settings), path);
+    const input = captureInputFromMarkdown(renderTemplate(template, styledTitle, now, settings), path);
     const tags = [...(input.tags ?? []), ...(options.tags ?? [])];
-    return this.captureAs("create", { ...input, title, tags, now }, options);
+    return this.captureAs("create", { ...input, title: styledTitle, tags, now }, options, type);
   }
 
   async capture(input: CaptureInput, options: CaptureOptions = {}): Promise<CaptureResult> {
-    return this.captureAs("capture", input, options);
+    const settings = this.settings.templates;
+    const { notes } = await this.load();
+    const path =
+      settings &&
+      templateFor(
+        notes.map((note) => note.path),
+        settings.folder,
+        "capture",
+      );
+    if (!path || !settings) return this.captureAs("capture", input, options, "capture");
+    const now = input.now ?? new Date();
+    const title = captureTitle(input, this.settings.capture);
+    const template = (notes.find((note) => note.path === path) as Note).raw;
+    const base = captureInputFromMarkdown(renderTemplate(template, title, now, settings), path);
+    return this.captureAs(
+      "capture",
+      {
+        ...base,
+        ...input,
+        title,
+        tags: [...(base.tags ?? []), ...(input.tags ?? [])],
+        source: input.source ?? base.source,
+        properties: { ...base.properties, ...input.properties },
+        text: [base.text.trim(), input.text.trim()].filter(Boolean).join("\n\n"),
+        now,
+      },
+      options,
+      "capture",
+    );
   }
 
   /** Capture under `op`: the note's path is planned first, and written only when the mask reaches it. */
-  private async captureAs(op: OperationName, input: CaptureInput, options: CaptureOptions): Promise<CaptureResult> {
+  private async captureAs(
+    op: OperationName,
+    input: CaptureInput,
+    options: CaptureOptions,
+    type?: string,
+  ): Promise<CaptureResult> {
     this.mask.check(op);
     const planned = { ...input, now: input.now ?? new Date() };
-    const plan = await capture(this.root, planned, this.settings.capture, { dryRun: true });
+    const settings = { ...this.settings.capture, ...(type ? this.settings.types[type.toLowerCase()] : undefined) };
+    const plan = await capture(this.root, planned, settings, { dryRun: true });
     this.mask.check(op, [plan.path]);
-    return options.dryRun ? plan : this.recorded(capture(this.root, planned, this.settings.capture, options));
+    return options.dryRun ? plan : this.recorded(capture(this.root, planned, settings, options));
   }
 
   /**
@@ -813,7 +1014,10 @@ export class Vault {
   }
 
   /** Notes ranked by fuzzy match of the query over their path, title, and aliases, with fzf's scoring rules. */
-  async suggest(query: string, options: Filter & { limit?: number; anyTerm?: boolean } = {}): Promise<Suggestion[]> {
+  async suggest(
+    query: string,
+    options: Filter & { limit?: number; offset?: number; anyTerm?: boolean } = {},
+  ): Promise<Suggestion[]> {
     return suggestAmong(await this.reachable("suggest"), query, options);
   }
 
@@ -918,7 +1122,12 @@ export class Vault {
     );
     const fingerprint = this.watch === undefined ? "" : await this.fingerprint(paths);
     this.checked = Date.now();
-    return { notes, index: new LinkIndex(paths), fingerprint };
+    return {
+      notes,
+      search: new Map(notes.map((note) => [note.path, indexDocument(note)])),
+      index: new LinkIndex(paths),
+      fingerprint,
+    };
   }
 
   private async paths(): Promise<string[]> {
@@ -940,9 +1149,11 @@ export class Vault {
 function parseNote(path: string, raw: string): Note {
   const { data, body } = splitFrontmatter(raw);
   const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value : undefined);
+  const firstLine = body.split(/\r?\n/).find((line) => line.trim() !== "");
+  const heading = firstLine && /^ {0,3}#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/.exec(firstLine)?.[1]?.trim();
   return {
     path,
-    title: text(data.title) ?? posix.basename(path, ".md"),
+    title: text(data.title) ?? heading ?? posix.basename(path, ".md"),
     type: text(data.type),
     status: text(data.status),
     tags: noteTags(data.tags),
@@ -1018,14 +1229,21 @@ function filtered(notes: Note[], filter: Filter): Note[] {
 function suggestAmong(
   notes: Note[],
   query: string,
-  options: Filter & { limit?: number; anyTerm?: boolean },
+  options: Filter & { limit?: number; offset?: number; anyTerm?: boolean },
 ): Suggestion[] {
   const candidates = filtered(notes, options).map((note) => ({
     item: note,
     texts: [note.path, note.title, ...note.aliases],
   }));
-  const ranked = fuzzyRank(query, candidates, options.limit ?? 10, { anyTerm: options.anyTerm });
-  return ranked.map(({ item, score, matched }) => ({ ...summarize(item), score, matched }));
+  const start = pageOffset(options.offset);
+  const ranked = fuzzyRank(query, candidates, start + (options.limit ?? 10), { anyTerm: options.anyTerm });
+  return ranked.slice(start).map(({ item, score, matched }) => ({ ...summarize(item), score, matched }));
+}
+
+function pageOffset(value: number | undefined): number {
+  if (value === undefined) return 0;
+  if (!Number.isSafeInteger(value) || value < 0) throw new InputError("offset must be a non-negative integer");
+  return value;
 }
 
 function summarize(note: Note): NoteSummary {

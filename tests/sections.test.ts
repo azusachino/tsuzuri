@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SectionError, Vault, WriteConflictError } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { copyVault } from "./git.ts";
 
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const PLAN = [
   "---",
   "# a YAML comment",
@@ -121,7 +121,7 @@ describe("guards", () => {
   test("the CLI takes bullets, stdin, and --if-hash, and refuses what it cannot do", async () => {
     const root = copyVault();
     const run = (args: string[], input?: string) =>
-      spawnSync("bun", [CLI, "--vault", root, ...args], { encoding: "utf8", input });
+      spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8", input });
     expect(run(["append", "Weekly/2026-W38.md", "- a bullet", "--heading", "plan"]).status).toBe(0);
     expect(readFileSync(join(root, "Weekly", "2026-W38.md"), "utf8")).toContain("- a bullet");
     expect(run(["section", "put", "Weekly/2026-W38.md", "--heading", "plan"], "- from stdin\n").status).toBe(0);

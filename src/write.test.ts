@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
   lstatSync,
@@ -12,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { contentHash, splice, WriteConflictError, writeNote } from "./write.ts";
 
 const NOTE = "Topics/Cognitive load.md";

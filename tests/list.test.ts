@@ -1,13 +1,13 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 const paths = (notes: { path: string }[]) => notes.map((note) => note.path);
 
 /** The fixture plus a shelf of books, so "latest books" has something to find. */
@@ -70,7 +70,7 @@ describe("sort and limit", () => {
   });
 
   test("are flags on the CLI", () => {
-    const run = (...args: string[]) => spawnSync("bun", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
     const result = run("list", "--where", "type=person", "--sort", "modified", "--desc", "--format", "paths");
     expect(result.stdout).toBe("People/Plato.md\nPeople/Greek/Plato.md\n");
     expect(run("list", "--where", "born", "--format", "paths").stdout).toBe("People/Plato.md\n");

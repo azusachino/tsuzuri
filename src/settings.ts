@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConfigError } from "./errors.ts";
+import { vaultPath } from "./operations.ts";
 import { parseToml } from "./providers.ts";
 
 export const CONFIG_FILE = "tsuzuri.toml";
@@ -10,13 +11,8 @@ export { UnsupportedError } from "./chain.ts";
 export interface CaptureSettings {
   /** Folder for new notes, relative to the vault root; `""` is the root. */
   folder: string;
-  /** `title` names the file after the note's title, as Obsidian does; `slug` uses an ASCII kebab-case stem. */
-  filename: "title" | "slug";
-  /** Frontmatter keys in the order written. `title`, `created`, `modified`, `tags`, and `source` are filled by capture; other keys come from `values`. */
-  properties: string[];
-  values: Record<string, string>;
-  /** moment-style format for `created` and `modified`; `YYYY-MM-DD` by default, the format of Obsidian's Date property. */
-  timestampFormat: string;
+  /** A filename pattern using the same placeholders as a template. */
+  filename: string;
   /** `lowercase` lowercases title words except `titleAllow` entries and spaces Latin text apart from CJK text. */
   titleStyle: "as-written" | "lowercase";
   titleAllow: string[];
@@ -37,12 +33,15 @@ export interface TemplateSettings {
 
 export interface VaultSettings {
   capture: CaptureSettings;
+  types: Record<string, { folder: string; filename: string }>;
   /** Unset when no source names a template folder; `new` then raises `UnsupportedError`. */
   templates?: TemplateSettings;
   /** The extensions the settings list, as written: `tsuzuri:<name>` for a bundled one, else a vault-relative module. */
   extensions: string[];
   /** The tables the loaded extensions read, as written, with code options' tables over the file's. */
   tables: Record<string, Record<string, unknown>>;
+  /** Provenance of each core setting, for `config`. */
+  sources: Record<string, string>;
 }
 
 /** Which extension tables a `Vault` accepts: those its loaded extensions read, and any at all when one was skipped. */
@@ -55,17 +54,11 @@ export interface TableClaims {
 export interface TsuzuriConfig {
   capture?: {
     folder?: string;
-    filename?: "title" | "slug";
-    properties?: string[];
-    values?: Record<string, string>;
-    timestamp_format?: string;
-    title_style?: "as-written" | "lowercase";
-    /** A TOML file whose string arrays list title words to keep as written, relative to the vault root. */
-    title_allowlist?: string;
-    tag_style?: "as-written" | "kebab";
-    require_tags?: boolean;
-    reject_tags?: string[];
+    filename?: string;
   };
+  types?: Record<string, { folder?: string; filename?: string }>;
+  tags?: { style?: "as-written" | "kebab"; require?: boolean; reject?: string[] };
+  titles?: { case?: "as-written" | "lowercase"; keep?: string[] };
   templates?: { folder?: string; date_format?: string; time_format?: string };
   /** Extensions to load: `tsuzuri:<name>` for a bundled one, or a module path relative to the vault root. */
   extensions?: string[];
@@ -74,10 +67,7 @@ export interface TsuzuriConfig {
 }
 
 const DEFAULT_CAPTURE: Omit<CaptureSettings, "folder"> = {
-  filename: "title",
-  properties: ["tags", "source"],
-  values: {},
-  timestampFormat: "YYYY-MM-DD",
+  filename: "{{title}}",
   titleStyle: "as-written",
   titleAllow: [],
   tagStyle: "as-written",
@@ -93,30 +83,25 @@ function readToml(root: string, path: string): unknown {
   }
 }
 
-function stringsIn(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(stringsIn);
-  if (typeof value === "object" && value !== null) return Object.values(value).flatMap(stringsIn);
-  return [];
-}
-
 /** A setting's allowed value: a type, or the strings an enum accepts. */
-type Rule = "string" | "boolean" | "strings" | "string table" | readonly string[];
+type Rule = "string" | "boolean" | "strings" | readonly string[];
 
 const RULES: Record<string, Record<string, Rule>> = {
-  capture: {
-    folder: "string",
-    filename: ["title", "slug"],
-    properties: "strings",
-    values: "string table",
-    timestamp_format: "string",
-    title_style: ["as-written", "lowercase"],
-    title_allowlist: "string",
-    tag_style: ["as-written", "kebab"],
-    require_tags: "boolean",
-    reject_tags: "strings",
-  },
+  capture: { folder: "string", filename: "string" },
   templates: { folder: "string", date_format: "string", time_format: "string" },
+  tags: { style: ["as-written", "kebab"], require: "boolean", reject: "strings" },
+  titles: { case: ["as-written", "lowercase"], keep: "strings" },
+};
+
+const RETIRED: Record<string, string> = {
+  "capture.properties": "put those properties in templates/capture.md",
+  "capture.values": "put those values in templates/capture.md",
+  "capture.timestamp_format": "use {{date:FORMAT}} in templates/capture.md",
+  "capture.title_style": "use [titles] case",
+  "capture.title_allowlist": "use [titles] keep",
+  "capture.tag_style": "use [tags] style",
+  "capture.require_tags": "use [tags] require",
+  "capture.reject_tags": "use [tags] reject",
 };
 
 const isTable = (value: unknown): value is Record<string, unknown> =>
@@ -125,7 +110,6 @@ const isTable = (value: unknown): value is Record<string, unknown> =>
 function fits(value: unknown, rule: Rule): boolean {
   if (Array.isArray(rule)) return rule.includes(value as string);
   if (rule === "strings") return Array.isArray(value) && value.every((item) => typeof item === "string");
-  if (rule === "string table") return isTable(value) && Object.values(value).every((item) => typeof item === "string");
   return typeof value === rule;
 }
 
@@ -134,6 +118,8 @@ function checkTable(value: unknown, rules: Record<string, Rule>, path: string, s
   for (const [key, setting] of Object.entries(value)) {
     const rule = rules[key];
     if (!rule) {
+      if (RETIRED[`${path}.${key}`])
+        throw new ConfigError(`${source}: ${path}.${key} was removed; ${RETIRED[`${path}.${key}`]}`);
       throw new ConfigError(`${source}: unknown key ${path}.${key}; ${path} takes ${Object.keys(rules).join(", ")}`);
     }
     if (!fits(setting, rule)) {
@@ -141,6 +127,12 @@ function checkTable(value: unknown, rules: Record<string, Rule>, path: string, s
         ? `one of ${rule.join(", ")}`
         : `a ${rule === "strings" ? "list of strings" : rule}`;
       throw new ConfigError(`${source}: ${path}.${key} must be ${wanted}`);
+    }
+    if (key === "folder" && typeof setting === "string" && vaultPath(setting) === undefined) {
+      throw new ConfigError(`${source}: ${path}.folder must stay inside the vault`);
+    }
+    if (key === "filename" && typeof setting === "string" && setting.trim() === "") {
+      throw new ConfigError(`${source}: ${path}.filename must not be empty`);
     }
   }
 }
@@ -151,6 +143,12 @@ function checkConfig(config: unknown, source: string, claims: TableClaims): Tsuz
   for (const [section, value] of Object.entries(config)) {
     if (section === "extensions") {
       if (!fits(value, "strings")) throw new ConfigError(`${source}: extensions must be a list of strings`);
+      continue;
+    }
+    if (section === "types") {
+      if (!isTable(value)) throw new ConfigError(`${source}: types must be a table`);
+      for (const [type, route] of Object.entries(value))
+        checkTable(route, RULES.capture as Record<string, Rule>, `types.${type}`, source);
       continue;
     }
     const rules = RULES[section];
@@ -169,7 +167,9 @@ function checkConfig(config: unknown, source: string, claims: TableClaims): Tsuz
         `${source}: [journal] needs the journal extension: add extensions = ["tsuzuri:journal"] (ADR 0020)`,
       );
     }
-    throw new ConfigError(`${source}: unknown key ${section}; settings take capture, templates, extensions`);
+    throw new ConfigError(
+      `${source}: unknown key ${section}; settings take capture, types, tags, titles, templates, extensions`,
+    );
   }
   return config as TsuzuriConfig;
 }
@@ -199,37 +199,82 @@ export function resolveSettings(
     if (isTable(value)) tables[table] = value;
   }
   const capture = { ...file.capture, ...code.capture };
-  const allowFile = capture.title_allowlist;
-  const template = templates(file, code);
+  const tags = { ...file.tags, ...code.tags };
+  const titles = { ...file.titles, ...code.titles };
+  const template = templates(root, file, code);
+  const types = new Map<string, { folder?: string; filename?: string }>();
+  for (const [name, route] of Object.entries(file.types ?? {})) types.set(name.toLowerCase(), route);
+  for (const [name, route] of Object.entries(code.types ?? {})) {
+    types.set(name.toLowerCase(), { ...types.get(name.toLowerCase()), ...route });
+  }
+  const source = (key: string, codeValue: unknown, fileValue: unknown) =>
+    [key, codeValue !== undefined ? "options" : fileValue !== undefined ? CONFIG_FILE : "default"] as const;
+  const routeIn = (routes: TsuzuriConfig["types"], name: string) =>
+    Object.entries(routes ?? {}).find(([key]) => key.toLowerCase() === name)?.[1];
+  const sources: Record<string, string> = Object.fromEntries([
+    source("capture.folder", code.capture?.folder, file.capture?.folder),
+    source("capture.filename", code.capture?.filename, file.capture?.filename),
+    source("tags.style", code.tags?.style, file.tags?.style),
+    source("tags.require", code.tags?.require, file.tags?.require),
+    source("tags.reject", code.tags?.reject, file.tags?.reject),
+    source("titles.case", code.titles?.case, file.titles?.case),
+    source("titles.keep", code.titles?.keep, file.titles?.keep),
+    source("templates.folder", code.templates?.folder, file.templates?.folder),
+    source("templates.date_format", code.templates?.date_format, file.templates?.date_format),
+    source("templates.time_format", code.templates?.time_format, file.templates?.time_format),
+    source("extensions", code.extensions, file.extensions),
+    ...[...claims.tables].map((name) => source(name, code[name], file[name])),
+    ...[...types.keys()].flatMap((name) => [
+      source(`types.${name}.folder`, routeIn(code.types, name)?.folder, routeIn(file.types, name)?.folder),
+      source(`types.${name}.filename`, routeIn(code.types, name)?.filename, routeIn(file.types, name)?.filename),
+    ]),
+  ]);
+  for (const [name, route] of types) {
+    if (route.folder === undefined) sources[`types.${name}.folder`] = sources["capture.folder"] ?? "default";
+    if (route.filename === undefined) sources[`types.${name}.filename`] = sources["capture.filename"] ?? "default";
+  }
+  if (code.extensions !== undefined && file.extensions !== undefined) {
+    sources.extensions = `${CONFIG_FILE} + options`;
+  }
 
   return {
     capture: {
       folder: capture.folder ?? "",
       filename: capture.filename ?? DEFAULT_CAPTURE.filename,
-      properties: capture.properties ?? DEFAULT_CAPTURE.properties,
-      values: capture.values ?? DEFAULT_CAPTURE.values,
-      timestampFormat: capture.timestamp_format ?? DEFAULT_CAPTURE.timestampFormat,
-      titleStyle: capture.title_style ?? DEFAULT_CAPTURE.titleStyle,
-      titleAllow: allowFile ? stringsIn(readToml(root, allowFile)) : DEFAULT_CAPTURE.titleAllow,
-      tagStyle: capture.tag_style ?? DEFAULT_CAPTURE.tagStyle,
-      requireTags: capture.require_tags ?? DEFAULT_CAPTURE.requireTags,
-      rejectTags: capture.reject_tags ?? DEFAULT_CAPTURE.rejectTags,
+      titleStyle: titles.case ?? DEFAULT_CAPTURE.titleStyle,
+      titleAllow: titles.keep ?? DEFAULT_CAPTURE.titleAllow,
+      tagStyle: tags.style ?? DEFAULT_CAPTURE.tagStyle,
+      requireTags: tags.require ?? DEFAULT_CAPTURE.requireTags,
+      rejectTags: tags.reject ?? DEFAULT_CAPTURE.rejectTags,
     },
+    types: Object.fromEntries(
+      [...types].map(([name, route]) => [
+        name,
+        {
+          folder: route.folder ?? capture.folder ?? "",
+          filename: route.filename ?? capture.filename ?? DEFAULT_CAPTURE.filename,
+        },
+      ]),
+    ),
     ...(template ? { templates: template } : {}),
     extensions: listedExtensions(root, code),
     tables,
+    sources,
   };
 }
 
 /** `[templates]` in code options or `tsuzuri.toml`; no folder is assumed. */
-function templates(file: TsuzuriConfig, code: TsuzuriConfig): TemplateSettings | undefined {
-  const folder = code.templates?.folder ?? file.templates?.folder;
+function templates(root: string, file: TsuzuriConfig, code: TsuzuriConfig): TemplateSettings | undefined {
+  const folder =
+    code.templates?.folder ??
+    file.templates?.folder ??
+    (readdirSync(root).includes("templates") ? "templates" : undefined);
   if (folder === undefined || folder.trim() === "") return undefined;
   return {
     folder: folder.replace(/^\/+|\/+$/g, ""),
     // Obsidian's own defaults for a template's {{date}} and {{time}}.
     dateFormat: code.templates?.date_format ?? file.templates?.date_format ?? "YYYY-MM-DD",
     timeFormat: code.templates?.time_format ?? file.templates?.time_format ?? "HH:mm",
-    source: code.templates?.folder ? "options" : CONFIG_FILE,
+    source: code.templates?.folder ? "options" : file.templates?.folder ? CONFIG_FILE : "default",
   };
 }

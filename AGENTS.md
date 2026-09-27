@@ -16,8 +16,8 @@ One npm package at the repository root.
 
 ## Toolchain and tasks
 
-- **mise first:** Bun and Node are pinned in `.mise.toml`; run `mise install`.
-- **make is the task runner:** `make check` (lint, typecheck, test) before every commit; `make validate` (check, build, and run the binary) before a PR. CI runs `make validate`, and `make node-smoke` on Node.
+- **mise first:** Node, Bun, rumdl, and typos are pinned in `.mise.toml`; install `node rumdl typos` for the Node toolchain. Bun is optional for `make node-smoke`.
+- **make is the task runner:** `make check` (lint, typecheck, test) before every commit; `make validate` (check, build, and run the CLI) before a PR. CI runs `make validate` on Node 22 and 24 without Bun, and `make node-smoke` with Bun.
 - **Portable by default:** new code uses standard `node:` modules and Web APIs that both Bun and Node provide. A Bun-only API belongs in a provider of a [fallback chain](docs/roadmap.md#capabilities-and-fallback-chains), with a portable provider that returns identical results.
 - **Dependencies:** add a library only when it has released within the past year, has few or no dependencies of its own, and does something hard to get right. Otherwise implement the part tsuzuri needs.
 

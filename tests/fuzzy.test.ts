@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { NotFoundError, Vault } from "tsuzuri";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
-const CLI = join(import.meta.dir, "..", "src", "cli.ts");
+const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
 
 describe("find", () => {
   test("ranks Latin titles, aliases, and paths", async () => {
@@ -49,10 +49,10 @@ describe("a failed get", () => {
   });
 
   test("prints the suggestions from the CLI and exits 1", () => {
-    const result = spawnSync("bun", [CLI, "--vault", FIXTURE, "get", "wrkng mem"], { encoding: "utf8" });
+    const result = spawnSync("node", [CLI, "--vault", FIXTURE, "get", "wrkng mem"], { encoding: "utf8" });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("closest: Topics/Working memory.md");
-    const found = spawnSync("bun", [CLI, "--vault", FIXTURE, "find", "wrkng mem", "--json"], { encoding: "utf8" });
+    const found = spawnSync("node", [CLI, "--vault", FIXTURE, "find", "wrkng mem", "--json"], { encoding: "utf8" });
     expect(JSON.parse(found.stdout)[0]).toMatchObject({ path: "Topics/Working memory.md" });
   });
 });

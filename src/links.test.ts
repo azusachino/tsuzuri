@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { extractLinks, frontmatterSpans, linkSpans } from "./links.ts";
 
-const VAULTS = join(import.meta.dir, "..", "tests");
+const VAULTS = join(import.meta.dirname, "..", "tests");
 
 /** Every Markdown file under a folder, as its text. */
 function texts(root: string): string[] {

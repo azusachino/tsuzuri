@@ -2,9 +2,10 @@
  * The prelude is the SDK's contract (ADR 0009). These lists fail on any change to it, so adding, renaming, or
  * removing an export is a decision someone makes on purpose, recorded in the changelog.
  */
-import { expect, test } from "bun:test";
+
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { expect, test } from "vitest";
 
 const RUNTIME = [
   "CaptureError",
@@ -33,6 +34,7 @@ const TYPES = [
   "CaptureOptions",
   "CaptureResult",
   "CaptureSettings",
+  "CheckResult",
   "Extension",
   "InputProperty",
   "OpenOptions",
@@ -45,6 +47,7 @@ const TYPES = [
   "GrepLine",
   "GrepOptions",
   "Heading",
+  "InitResult",
   "ListOptions",
   "DeleteResult",
   "MoveResult",
@@ -63,6 +66,7 @@ const TYPES = [
   "Suggestion",
   "TagCount",
   "TemplateSettings",
+  "TypeInfo",
   "VaultOptions",
   "VaultSettings",
   "WriteOptions",
@@ -74,7 +78,7 @@ test("exports exactly the prelude's runtime names", async () => {
 });
 
 test("exports exactly the prelude's types", () => {
-  const entry = readFileSync(join(import.meta.dir, "..", "src", "index.ts"), "utf8");
+  const entry = readFileSync(join(import.meta.dirname, "..", "src", "index.ts"), "utf8");
   const types = [...entry.matchAll(/export type \{([^}]*)\}/g)].flatMap((match) =>
     (match[1] ?? "")
       .split(",")

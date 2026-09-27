@@ -3,12 +3,13 @@
  * freeze behaviour this suite cannot confirm against the Obsidian app, so these tests assert properties any correct
  * reader must hold. A corpus that is not checked out is skipped; `make corpus` fetches the opt-in ones.
  */
-import { describe, expect, test } from "bun:test";
+
 import { existsSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { Vault } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 
-const VAULTS = join(import.meta.dir, "vaults");
+const VAULTS = join(import.meta.dirname, "vaults");
 const present = (dir: string) => existsSync(dir) && readdirSync(dir).length > 0;
 
 /** Markdown files outside dot folders, counted independently of the scanner. */
@@ -46,6 +47,14 @@ describe.skipIf(!present(KEPANO))("kepano-obsidian", () => {
     const notes = await vault.notes();
     expect(notes.length).toBe(markdownFiles(KEPANO).length);
     expect(notes.every((note) => note.title.trim() !== "")).toBe(true);
+  });
+
+  test("keeps Obsidian titles from frontmatter or filenames", async () => {
+    for (const note of await vault.notes()) {
+      const property = note.frontmatter.title;
+      const oldTitle = typeof property === "string" && property.trim() ? property : posix.basename(note.path, ".md");
+      expect(note.title, note.path).toBe(oldTitle);
+    }
   });
 
   test("resolves links consistently", async () => {

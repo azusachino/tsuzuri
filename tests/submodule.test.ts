@@ -2,11 +2,12 @@
  * A vault as a real one often sits: checked out as a submodule of another repository, and shared on one machine
  * between its owner and a bot. The bot captures without Git, so the owner's staged and unstaged work stays theirs.
  */
-import { describe, expect, test } from "bun:test";
+
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vault } from "tsuzuri";
+import { describe, expect, test } from "vitest";
 import { git, gitVault } from "./git.ts";
 
 const NOTE = "Topics/Working memory.md";

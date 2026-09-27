@@ -15,8 +15,11 @@ concurrency:
 
 jobs:
   validate:
-    name: make validate
+    name: make validate (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -24,7 +27,15 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           install: true
+          install_args: rumdl typos
           cache: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Verify Bun is absent
+        run: '! command -v bun'
 
       - name: Install dependencies
         run: make install
@@ -42,6 +53,7 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           install: true
+          install_args: bun node
           cache: true
 
       - name: Install dependencies

@@ -5,6 +5,8 @@ export interface GrepOptions {
   fixed?: boolean;
   /** Lines of context either side of each match, like `rg -C`. */
   context?: number;
+  /** Number of matching lines to skip in path and line order. */
+  offset?: number;
 }
 
 export interface GrepLine {

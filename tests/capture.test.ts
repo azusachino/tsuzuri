@@ -1,25 +1,17 @@
-import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConfigError, type TsuzuriConfig, Vault } from "tsuzuri";
-import { copyVault } from "./git.ts";
-import { FIXTURE } from "./vault.test.ts";
+import { describe, expect, test } from "vitest";
+import { copyVault, FIXTURE } from "./git.ts";
 
 const NOW = new Date(2026, 8, 24, 19, 5);
 
 /** A vault that declares a strict house style, the way a vault's own tsuzuri.toml would. */
 const STRICT: TsuzuriConfig = {
-  capture: {
-    folder: "queue",
-    filename: "slug",
-    properties: ["title", "created", "modified", "kind", "tags", "source"],
-    values: { kind: "capture" },
-    title_style: "lowercase",
-    tag_style: "kebab",
-    require_tags: true,
-    reject_tags: ["todo"],
-  },
+  capture: { folder: "queue", filename: "{{slug}}" },
+  titles: { case: "lowercase" },
+  tags: { style: "kebab", require: true, reject: ["todo"] },
 };
 
 describe("capture settings in a vault", () => {
@@ -27,12 +19,11 @@ describe("capture settings in a vault", () => {
     expect(new Vault(join(FIXTURE, "People")).settings.capture.folder).toBe("");
   });
 
-  test("read the title allowlist named in tsuzuri.toml", async () => {
+  test("read the inline title keep list in tsuzuri.toml", async () => {
     const root = copyVault();
-    writeFileSync(join(root, "casing.toml"), '[allow]\nwords = ["OpenAI"]\n');
     writeFileSync(
       join(root, "tsuzuri.toml"),
-      '[capture]\nfolder = "Inbox"\ntitle_style = "lowercase"\ntitle_allowlist = "casing.toml"\n',
+      '[capture]\nfolder = "Inbox"\n[titles]\ncase = "lowercase"\nkeep = ["OpenAI"]\n',
     );
     const result = await new Vault(root).capture({ text: "Trying OpenAI Tools" }, { dryRun: true });
     expect(result.path).toBe("Inbox/trying OpenAI tools.md");
@@ -60,12 +51,28 @@ describe("settings shape", () => {
   });
 
   test("rejects a value outside a setting's choices or type", () => {
-    expect(withToml('[capture]\nfilename = "Slug"\n')).toThrow("capture.filename must be one of title, slug");
-    expect(withToml("[capture]\nrequire_tags = 1\n")).toThrow("capture.require_tags must be a boolean");
-    expect(withToml('[capture]\nreject_tags = "todo"\n')).toThrow("reject_tags must be a list of strings");
-    expect(
-      () => new Vault(FIXTURE, { config: { capture: { tag_style: "Kebab" } } as unknown as TsuzuriConfig }),
-    ).toThrow("options: capture.tag_style must be one of as-written, kebab");
+    expect(withToml("[capture]\nfilename = 1\n")).toThrow("capture.filename must be a string");
+    expect(withToml("[tags]\nrequire = 1\n")).toThrow("tags.require must be a boolean");
+    expect(withToml('[tags]\nreject = "todo"\n')).toThrow("tags.reject must be a list of strings");
+    expect(() => new Vault(FIXTURE, { config: { tags: { style: "Kebab" } } as unknown as TsuzuriConfig })).toThrow(
+      "options: tags.style must be one of as-written, kebab",
+    );
+  });
+
+  test("names the new home of retired capture settings", () => {
+    const migrated = new Map([
+      ['properties = ["title"]', "templates/capture.md"],
+      ['values = { kind = "capture" }', "templates/capture.md"],
+      ['timestamp_format = "YYYY"', "{{date:FORMAT}}"],
+      ['title_style = "lowercase"', "[titles] case"],
+      ['title_allowlist = "casing.toml"', "[titles] keep"],
+      ['tag_style = "kebab"', "[tags] style"],
+      ["require_tags = true", "[tags] require"],
+      ['reject_tags = ["todo"]', "[tags] reject"],
+    ]);
+    for (const [oldKey, destination] of migrated) {
+      expect(withToml(`[capture]\n${oldKey}\n`)).toThrow(destination);
+    }
   });
 });
 

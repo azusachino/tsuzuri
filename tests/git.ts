@@ -4,7 +4,7 @@ import { cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const FIXTURE = join(import.meta.dir, "fixtures", "vault");
+export const FIXTURE = join(import.meta.dirname, "fixtures", "vault");
 
 /** A throwaway copy of the fixture vault, outside any Git repository. */
 export function copyVault(): string {
