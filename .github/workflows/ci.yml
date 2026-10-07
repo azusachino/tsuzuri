@@ -14,8 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '.github/workflows/ci.yml'
+              - 'Makefile'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - 'biome.json'
+              - 'src/**'
+              - 'tests/**'
+              - '.mise.toml'
+
   validate:
     name: make validate (Node ${{ matrix.node }})
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -45,6 +72,8 @@ jobs:
 
   node:
     name: make node-smoke
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -61,3 +90,51 @@ jobs:
 
       - name: Run the read commands on Node
         run: make node-smoke
+
+  docs:
+    name: Documentation and spelling
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          install_args: rumdl typos
+          cache: true
+
+      - name: Check Markdown and typos
+        run: rumdl check . && typos
+
+  check:
+    name: make check
+    if: ${{ always() }}
+    needs: [changes, validate, node, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every gate
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          NODE_RESULT: ${{ needs.node.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+        run: |
+          for res in "$VALIDATE_RESULT" "$NODE_RESULT" "$DOCS_RESULT"; do
+            if [[ "$res" != "success" && "$res" != "skipped" ]]; then
+              echo "Gate failed with state: $res"
+              exit 1
+            fi
+          done
+          ran=0
+          for res in "$VALIDATE_RESULT" "$NODE_RESULT" "$DOCS_RESULT"; do
+            if [[ "$res" == "success" ]]; then
+              ran=1
+              break
+            fi
+          done
+          if [[ $ran -ne 1 ]]; then
+            echo "No gate was executed"
+            exit 1
+          fi
