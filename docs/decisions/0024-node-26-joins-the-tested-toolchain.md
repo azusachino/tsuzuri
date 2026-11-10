@@ -1,6 +1,6 @@
 # 0024 node 26 joins the tested toolchain
 
-Status: accepted, 2026-11-10 (0.9.1). Extends [ADR 0013](0013-node-first-toolchain.md). ([#130](https://github.com/azusachino/tsuzuri/issues/130))
+Status: accepted, 2026-11-10. Extends [ADR 0013](0013-node-first-toolchain.md). ([#130](https://github.com/azusachino/tsuzuri/issues/130)) This changes no published code, so it waits in the changelog's Unreleased section rather than cutting a version of its own.
 
 ## context
 
