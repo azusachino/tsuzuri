@@ -93,10 +93,10 @@ Which of these an agent may call is decided in 0.4, not by this milestone.
 
 Drilling a course in a vault that records its own progress measured four gaps between what the workflow does and what the client offers. The journeys that produced them run against a scratch vault, so each gap has a command and an output behind it rather than a prediction. In order:
 
-1. **Sort on the vault's own property (implemented, pending release):** `list --sort` takes any frontmatter property, and numbers compare as numbers, so a level 10 follows 9 ([#125](https://github.com/azusachino/tsuzuri/issues/125)).
-2. **Reads skip the declared templates folder (implemented, pending release):** a template is not a note, and today one appears in a progress table with a placeholder date ([#126](https://github.com/azusachino/tsuzuri/issues/126), [ADR 0022](decisions/0022-reads-skip-the-declared-templates-folder.md)).
-3. **Several properties in one guarded write (implemented, pending release):** a level and the date of the check that earned it land together or not at all, instead of two reads and two writes ([#127](https://github.com/azusachino/tsuzuri/issues/127)).
-4. **Append a table row without rewriting the section (implemented, pending release):** one check is one row, refused when the cell count disagrees with the header ([#128](https://github.com/azusachino/tsuzuri/issues/128), [ADR 0023](decisions/0023-a-table-row-is-added-in-place.md)).
+1. **Sort on the vault's own property (implemented):** `list --sort` takes any frontmatter property, and numbers compare as numbers, so a level 10 follows 9 ([#125](https://github.com/azusachino/tsuzuri/issues/125)).
+2. **Reads skip the declared templates folder (implemented):** a template is not a note, and today one appears in a progress table with a placeholder date ([#126](https://github.com/azusachino/tsuzuri/issues/126), [ADR 0022](decisions/0022-reads-skip-the-declared-templates-folder.md)).
+3. **Several properties in one guarded write (implemented):** a level and the date of the check that earned it land together or not at all, instead of two reads and two writes ([#127](https://github.com/azusachino/tsuzuri/issues/127)).
+4. **Append a table row without rewriting the section (implemented):** one check is one row, refused when the cell count disagrees with the header ([#128](https://github.com/azusachino/tsuzuri/issues/128), [ADR 0023](decisions/0023-a-table-row-is-added-in-place.md)).
 
 ### 0.8.0: a product for any Markdown folder
 

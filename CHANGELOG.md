@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0
+
 - **Reads skip the declared templates folder.** `list`, `search`, `tags`, `nav`, `orphans`, `unresolved`, and `suggest` leave out the folder `[templates] folder` names, so a template no longer appears as a note with placeholder values. `notes`, `get`, `property`, and `grep` still reach one, and a vault without the setting is unchanged. ([#126](https://github.com/azusachino/tsuzuri/issues/126), [ADR 0022](docs/decisions/0022-reads-skip-the-declared-templates-folder.md))
 - **Several properties in one guarded write.** `prop set <note> key=value [key=value ...]` sets them in one write under one hash check, all or nothing; `Vault.setProperties` is the method, an `edit` operation. The single `key value` form is unchanged. ([#127](https://github.com/azusachino/tsuzuri/issues/127))
 - **A table row is added in place.** `section row <note> <row> --heading <heading>` inserts one row after the last row of the section's table, refusing a row whose cell count disagrees with the header and a section that has no table, with nothing written. ([#128](https://github.com/azusachino/tsuzuri/issues/128), [ADR 0023](docs/decisions/0023-a-table-row-is-added-in-place.md))
