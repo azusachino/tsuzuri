@@ -114,6 +114,13 @@ Run `init --dry-run` to see a starter `tsuzuri.toml` and `templates/capture.md`,
 - `self-description.test › init refuses a pre-existing template before writing the config`
 - `self-description.test › types and config describe effective routes and provenance`
 
+### T13. Work a queue ordered by the vault's own property
+
+A vault that records progress in its own frontmatter asks "which is stalest": `list --type skill --sort checked`. Any property sorts, numbers compare as numbers so a level 10 follows 9, a list property joins its items, and notes without the value come last in either direction. Before this, the queue needed `list --json | jq 'sort_by(.checked)'`.
+
+- `list.test › sort by any frontmatter property, numbers as numbers`
+- `list.test › are flags on the CLI`
+
 ## from an agent
 
 An agent reaches tsuzuri in one of two ways: a coding agent shells out to the CLI with `--json`, and a bot imports the SDK in-process. Both see the same operations, and every case below is written for a model that has never seen the vault.

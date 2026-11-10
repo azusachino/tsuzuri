@@ -2,7 +2,7 @@
  * Ready-made agent tools over a `Vault`: a name, the operation it runs, a JSON Schema for the input, MCP-style hints, and a
  * `run` bound to the SDK. A consumer registers `agentTools()` with its model and routes calls to `run`.
  */
-import { InputError, type OperationName, propertyValue, SORT_KEYS, type Vault } from "./index.ts";
+import { InputError, type OperationName, propertyValue, type Vault } from "./index.ts";
 
 export interface PropertySchema {
   type: "string" | "integer" | "boolean" | "array" | "object";
@@ -234,7 +234,7 @@ export const TOOLS: ToolDefinition[] = [
         description: "Frontmatter key to required text value; null asks only for presence",
         additionalProperties: { type: ["string", "null"] },
       },
-      sort: { type: "string", description: "Sort key", enum: SORT_KEYS },
+      sort: { type: "string", description: "Sort key: a frontmatter property, or title or path" },
       desc: bool("Sort descending"),
       limit: int("Most results"),
       offset: OFFSET,
@@ -244,7 +244,7 @@ export const TOOLS: ToolDefinition[] = [
       vault.list({
         ...filterOf(input),
         where: o<Record<string, string | null>>(input, "where"),
-        sort: o<(typeof SORT_KEYS)[number]>(input, "sort"),
+        sort: o<string>(input, "sort"),
         desc: o<boolean>(input, "desc"),
         limit: o<number>(input, "limit"),
         offset: o<number>(input, "offset"),

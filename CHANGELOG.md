@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Sort on any property.** `list --sort` takes a frontmatter property as well as `modified`, `created`, `title` and `path`; numbers compare as numbers so a level 10 follows 9, a list property joins its items, and notes without the value stay last in either direction. The SDK's `ListOptions.sort` is a string, `SORT_KEYS` still names the four summary keys, and `tsuzuri_list`'s `sort` no longer carries an `enum`. ([#125](https://github.com/azusachino/tsuzuri/issues/125))
+
 ## 0.8.0
 
 - **Product guide.** The README starts with a quick start and links to the full [configuration reference](docs/configuration.md); use cases now cover plain Markdown folders, large agent sessions, `init`, and `check`. ([#98](https://github.com/azusachino/tsuzuri/issues/98))

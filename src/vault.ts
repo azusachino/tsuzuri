@@ -154,11 +154,15 @@ export interface Filter {
   where?: Record<string, string | null>;
 }
 
+/** The keys every summary carries. `sort` also takes any frontmatter property by name. */
 export const SORT_KEYS = ["modified", "created", "title", "path"] as const;
 
 export interface ListOptions {
-  /** Dates sort as written, so ISO dates sort in time order. */
-  sort?: (typeof SORT_KEYS)[number];
+  /**
+   * A frontmatter property, `title`, or `path`. Numbers compare as numbers, so a level 10 follows 9,
+   * and dates compare as written, so ISO dates follow time. A list property joins its items.
+   */
+  sort?: string;
   desc?: boolean;
   limit?: number;
   /** Number of sorted results to skip before applying `limit`. */
@@ -457,20 +461,10 @@ export class Vault {
   }
 
   async list(filter: Filter & ListOptions = {}): Promise<NoteSummary[]> {
-    const notes = filtered(await this.reachable("list"), filter).map(summarize);
-    if (filter.sort) {
-      const key = filter.sort;
-      const direction = filter.desc ? -1 : 1;
-      notes.sort((a, b) => {
-        const left = a[key];
-        const right = b[key];
-        // Notes without the value sort last in either direction, as a spreadsheet does.
-        if (left === undefined || right === undefined) return left === right ? 0 : left === undefined ? 1 : -1;
-        return direction * left.localeCompare(right) || a.path.localeCompare(b.path);
-      });
-    }
+    const matched = filtered(await this.reachable("list"), filter);
+    if (filter.sort) matched.sort(bySortKey(filter.sort, filter.desc));
     const start = pageOffset(filter.offset);
-    return notes.slice(start, filter.limit === undefined ? undefined : start + filter.limit);
+    return matched.slice(start, filter.limit === undefined ? undefined : start + filter.limit).map(summarize);
   }
 
   async search(query: string, filter: Filter & { limit?: number; offset?: number } = {}): Promise<SearchHit[]> {
@@ -1244,6 +1238,34 @@ function pageOffset(value: number | undefined): number {
   if (value === undefined) return 0;
   if (!Number.isSafeInteger(value) || value < 0) throw new InputError("offset must be a non-negative integer");
   return value;
+}
+
+/** A sort value as text: `path`, `title`, or any frontmatter property; a list joins its items. */
+function sortValue(note: Note, key: string): string | undefined {
+  if (key === "path") return note.path;
+  if (key === "title") return note.title;
+  const value = note.frontmatter[key];
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+/** Two numbers compare as numbers, so 10 follows 9; anything else compares as text. */
+function compareSortValues(left: string, right: string): number {
+  const a = Number(left);
+  const b = Number(right);
+  if (left.trim() !== "" && right.trim() !== "" && Number.isFinite(a) && Number.isFinite(b)) return a - b;
+  return left.localeCompare(right, "en", { numeric: true });
+}
+
+function bySortKey(key: string, desc: boolean | undefined): (a: Note, b: Note) => number {
+  return (a, b) => {
+    const left = sortValue(a, key);
+    const right = sortValue(b, key);
+    // Notes without the value sort last in either direction, as a spreadsheet does.
+    if (left === undefined || right === undefined) return left === right ? 0 : left === undefined ? 1 : -1;
+    return (desc ? -1 : 1) * compareSortValues(left, right) || a.path.localeCompare(b.path);
+  };
 }
 
 function summarize(note: Note): NoteSummary {

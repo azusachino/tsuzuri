@@ -69,12 +69,42 @@ describe("sort and limit", () => {
     expect(paths(await vault.list({ sort: "path", desc: true, limit: 1 }))).toEqual(["Weekly/2026-W38.md"]);
   });
 
+  test("sort by any frontmatter property, numbers as numbers", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tsuzuri-levels-"));
+    const levels: [string, number | undefined][] = [
+      ["Deep", 10],
+      ["Middle", 4],
+      ["Shallow", 1],
+      ["Unlevelled", undefined],
+    ];
+    for (const [title, level] of levels) {
+      writeFileSync(
+        join(root, `${title}.md`),
+        `---\ntype: drill\n${level === undefined ? "" : `level: ${level}\n`}---\n`,
+      );
+    }
+    const drills = new Vault(root);
+    const byLevel = { where: { type: "drill" }, sort: "level" };
+    expect(paths(await drills.list(byLevel))).toEqual(["Shallow.md", "Middle.md", "Deep.md", "Unlevelled.md"]);
+    expect(paths(await drills.list({ ...byLevel, desc: true }))).toEqual([
+      "Deep.md",
+      "Middle.md",
+      "Shallow.md",
+      "Unlevelled.md",
+    ]);
+    const byGenre = paths(await withBooks().list({ where: { type: "book" }, under: "Notes", sort: "genre" }));
+    expect(byGenre).toEqual(["Notes/Emma.md", "Notes/Hyperion.md", "Notes/Dune.md", "Notes/Unread.md"]);
+  });
+
   test("are flags on the CLI", () => {
     const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", FIXTURE, ...args], { encoding: "utf8" });
     const result = run("list", "--where", "type=person", "--sort", "modified", "--desc", "--format", "paths");
     expect(result.stdout).toBe("People/Plato.md\nPeople/Greek/Plato.md\n");
     expect(run("list", "--where", "born", "--format", "paths").stdout).toBe("People/Plato.md\n");
-    expect(run("list", "--sort", "size").status).toBe(2);
+    expect(run("list", "--where", "type=person", "--sort", "born", "--format", "paths").stdout).toBe(
+      "People/Plato.md\nPeople/Greek/Plato.md\n",
+    );
+    expect(run("list", "--sort", "").status).toBe(2);
     expect(run("list", "--where", "=x").status).toBe(2);
   });
 });

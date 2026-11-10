@@ -17,7 +17,6 @@ import {
   type OperationName,
   propertyValue,
   type SectionWriteOptions,
-  SORT_KEYS,
   TsuzuriError,
   Vault,
   type WriteOptions,
@@ -91,7 +90,11 @@ const OPTIONS = {
     value: "<key=value|key>",
     summary: "filter on any frontmatter property; may repeat; a bare key means present",
   },
-  sort: { type: "string", value: "<modified|created|title|path>", summary: "order; notes without the value sort last" },
+  sort: {
+    type: "string",
+    value: "<key>",
+    summary: "a frontmatter property, title or path; numbers sort as numbers",
+  },
   desc: { type: "boolean", summary: "sort descending" },
   limit: { type: "string", value: "<n>", summary: "most results" },
   offset: { type: "string", value: "<n>", summary: "skip this many results in the same order" },
@@ -899,12 +902,10 @@ async function main(): Promise<void> {
     }
     case "list": {
       const sort = opts.sort;
-      if (sort !== undefined && !(SORT_KEYS as readonly string[]).includes(sort)) {
-        throw new UsageError(`--sort takes ${SORT_KEYS.join(", ")}`);
-      }
+      if (sort !== undefined && sort.trim() === "") throw new UsageError("--sort needs a property name");
       const notes = await vault.list({
         ...filter,
-        sort: sort as (typeof SORT_KEYS)[number] | undefined,
+        sort,
         desc: opts.desc,
         limit: count("limit", opts.limit),
         offset: offset(opts.offset),

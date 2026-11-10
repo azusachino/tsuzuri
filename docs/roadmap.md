@@ -89,6 +89,15 @@ Which of these an agent may call is decided in 0.4, not by this milestone.
 
 ## next
 
+### 0.9.0: a client a recorded workflow can drive
+
+Drilling a course in a vault that records its own progress measured four gaps between what the workflow does and what the client offers. The journeys that produced them run against a scratch vault, so each gap has a command and an output behind it rather than a prediction. In order:
+
+1. **Sort on the vault's own property (implemented, pending release):** `list --sort` takes any frontmatter property, and numbers compare as numbers, so a level 10 follows 9 ([#125](https://github.com/azusachino/tsuzuri/issues/125)).
+2. **Reads skip the declared templates folder:** a template is not a note, and today one appears in a progress table with a placeholder date ([#126](https://github.com/azusachino/tsuzuri/issues/126)). Changes the read reach, so it carries a decision record.
+3. **Several properties in one guarded write:** a level and the date of the check that earned it land together or not at all, instead of two reads and two writes ([#127](https://github.com/azusachino/tsuzuri/issues/127)).
+4. **Append a table row without rewriting the section:** one check is one row, refused when the cell count disagrees with the header ([#128](https://github.com/azusachino/tsuzuri/issues/128)), with a decision record for the third write shape.
+
 ### 0.8.0: a product for any Markdown folder
 
 From the 0.8.0 research: tsuzuri run on a 10,248-page MkDocs collection, its config and commands compared with zk, notesmd-cli, basic-memory, markdown-oxide, and Foam, and its toolchain measured on Node. Three decisions set the direction: Node first, with Bun as a fast path ([ADR 0013](decisions/0013-node-first-toolchain.md)); note types from templates and a smaller `tsuzuri.toml` ([ADR 0014](decisions/0014-note-types-from-templates.md)); any Markdown folder, Obsidian first ([ADR 0015](decisions/0015-any-markdown-folder.md)); an SDK that reads and writes the whole vault, leaving policy to the host ([ADR 0016](decisions/0016-the-sdk-reads-and-writes-the-whole-vault.md)); no journal ([ADR 0017](decisions/0017-no-journal-in-the-sdk.md)); named operations with a permission mask the host sets ([ADR 0018](decisions/0018-operations-and-a-permission-mask.md)); and a small core with extensions a vault defines ([ADR 0019](decisions/0019-a-small-core-and-vault-extensions.md)). In order:
