@@ -34,7 +34,8 @@ Reach for the narrowest verb:
 | add a new note | `capture <text> --tag <t>`, with tags from `tags` |
 | add to a note or one of its sections | `append <note> <text> [--heading H]` |
 | replace one section's body | `section put <note> --heading H <text>` |
-| set one frontmatter key | `prop set <note> <key> <value>` |
+| add one row to a section's table | `section row <note> <row> --heading H` |
+| set frontmatter keys in one write | `prop set <note> <key> <value>`, or `<key>=<value> ...` |
 | create a note from a template | `new <type> <title>` |
 | create a note at a chosen path | `write <path> <text>` |
 | replace a whole note, only when asked to | `put <note> <text>` |

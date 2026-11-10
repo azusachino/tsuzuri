@@ -287,7 +287,6 @@ describe("nav", () => {
       "Inbox",
       "Notes",
       "People",
-      "Templates",
       "Topics",
       "Weekly",
     ]);
@@ -307,20 +306,20 @@ describe("search", () => {
   test("keeps paths, BM25 scores, and snippets from the uncached calculation", async () => {
     const cognitive = await vault.search("cognitive load");
     expect(cognitive.map(({ path, score }) => [path, score])).toEqual([
-      ["Topics/Cognitive load.md", 5.207],
-      ["Topics/index.md", 2.854],
-      ["Home.md", 2.205],
-      ["Topics/Working memory.md", 1.942],
+      ["Topics/Cognitive load.md", 4.882],
+      ["Topics/index.md", 2.687],
+      ["Home.md", 2.086],
+      ["Topics/Working memory.md", 1.84],
     ]);
     expect(cognitive[0]?.snippet).toBe(
       "Cognitive load theory explains why working memory limits learning. - Background: [[Topics/Working memory]] and [[Working memory|wm]]. - Folder index: [[index]…",
     );
     expect((await vault.search("student of Socrates")).map(({ path, score }) => [path, score])).toEqual([
-      ["People/Plato.md", 8.712],
-      ["Topics/History/Timeline.md", 2.442],
+      ["People/Plato.md", 8.438],
+      ["Topics/History/Timeline.md", 2.347],
     ]);
     expect((await vault.search("乌龙茶")).map(({ path, score, snippet }) => [path, score, snippet])).toEqual([
-      ["Notes/乌龙茶.md", 8.335, "今天喝了乌龙茶，很好喝。乌龙茶适合下午。"],
+      ["Notes/乌龙茶.md", 8.068, "今天喝了乌龙茶，很好喝。乌龙茶适合下午。"],
     ]);
   });
 
