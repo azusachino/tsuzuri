@@ -43,7 +43,7 @@ import {
   vaultPath,
 } from "./operations.ts";
 import { indexDocument, rank, type SearchDocument } from "./search.ts";
-import { findSection, headingsOf, SectionError, sectionContentEnd } from "./sections.ts";
+import { findSection, headingsOf, type Section, SectionError, sectionContentEnd } from "./sections.ts";
 import {
   CONFIG_FILE,
   listedExtensions,
@@ -154,11 +154,15 @@ export interface Filter {
   where?: Record<string, string | null>;
 }
 
+/** The keys every summary carries. `sort` also takes any frontmatter property by name. */
 export const SORT_KEYS = ["modified", "created", "title", "path"] as const;
 
 export interface ListOptions {
-  /** Dates sort as written, so ISO dates sort in time order. */
-  sort?: (typeof SORT_KEYS)[number];
+  /**
+   * A frontmatter property, `title`, or `path`. Numbers compare as numbers, so a level 10 follows 9,
+   * and dates compare as written, so ISO dates follow time. A list property joins its items.
+   */
+  sort?: string;
   desc?: boolean;
   limit?: number;
   /** Number of sorted results to skip before applying `limit`. */
@@ -457,28 +461,19 @@ export class Vault {
   }
 
   async list(filter: Filter & ListOptions = {}): Promise<NoteSummary[]> {
-    const notes = filtered(await this.reachable("list"), filter).map(summarize);
-    if (filter.sort) {
-      const key = filter.sort;
-      const direction = filter.desc ? -1 : 1;
-      notes.sort((a, b) => {
-        const left = a[key];
-        const right = b[key];
-        // Notes without the value sort last in either direction, as a spreadsheet does.
-        if (left === undefined || right === undefined) return left === right ? 0 : left === undefined ? 1 : -1;
-        return direction * left.localeCompare(right) || a.path.localeCompare(b.path);
-      });
-    }
+    const matched = filtered(await this.reachable("list"), filter);
+    if (filter.sort) matched.sort(bySortKey(filter.sort, filter.desc));
     const start = pageOffset(filter.offset);
-    return notes.slice(start, filter.limit === undefined ? undefined : start + filter.limit);
+    return matched.slice(start, filter.limit === undefined ? undefined : start + filter.limit).map(summarize);
   }
 
   async search(query: string, filter: Filter & { limit?: number; offset?: number } = {}): Promise<SearchHit[]> {
     this.mask.check("search");
     const scan = await this.load();
+    const shown = withoutTemplates(scan.notes, this.settings.templates?.folder);
     const visible = this.mask.scope("search").everywhere
-      ? scan.notes
-      : scan.notes.filter((note) => this.mask.reaches("search", note.path));
+      ? shown
+      : shown.filter((note) => this.mask.reaches("search", note.path));
     const docs = filtered(visible, filter).map((note) => scan.search.get(note.path) as SearchDocument);
     const start = pageOffset(filter.offset);
     return rank(docs, query, start + (filter.limit ?? 10))
@@ -577,18 +572,41 @@ export class Vault {
    * line of the frontmatter are kept; a note without frontmatter gains a block.
    */
   async setProperty(ref: string, key: string, value: unknown, options: WriteOptions = {}): Promise<WriteResult> {
-    const note = await this.resolve("setProperty", ref);
+    return this.setProperties(ref, { [key]: value }, options);
+  }
+
+  /**
+   * Set several frontmatter keys in one write, all or nothing, under one hash check (issue #127). Comments, key order,
+   * quoting, and every other line of the frontmatter are kept; a note without frontmatter gains a block.
+   */
+  async setProperties(ref: string, values: Record<string, unknown>, options: WriteOptions = {}): Promise<WriteResult> {
+    const keys = Object.keys(values);
+    if (keys.length === 0) throw new WriteConflictError("setProperties needs at least one property");
+    const note = await this.resolve("setProperties", ref);
     return this.change(note.path, options, (current) => {
       const range = frontmatterRange(current);
-      if (!range) return `---\n${stringify({ [key]: value }, { lineWidth: 0 })}---\n${current}`;
+      if (!range) return `---\n${stringify(values, { lineWidth: 0 })}---\n${current}`;
       const doc = parseDocument(current.slice(range.start, range.end));
       if (doc.errors.length > 0) {
         throw new WriteConflictError(`${note.path} has frontmatter YAML cannot parse: ${doc.errors[0]?.message}`);
       }
-      doc.set(key, value);
+      for (const key of keys) doc.set(key, values[key]);
       const yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 }).replace(/\n$/, "");
       // An empty block has no line break of its own before the closing fence.
       return splice(current, range.start, range.end, range.start === range.end ? `${yaml}\n` : yaml);
+    });
+  }
+
+  /**
+   * Append one row to the table in section `heading` (issue #128). The row must have as many cells as the header, and
+   * a section without a table is refused rather than appended to.
+   */
+  async appendRow(ref: string, heading: string, row: string, options: WriteOptions = {}): Promise<WriteResult> {
+    const note = await this.resolve("appendRow", ref);
+    return this.change(note.path, options, (current) => {
+      const section = findSection(current, heading);
+      if (!section) throw new WriteConflictError(`${note.path} has no section "${heading}"`);
+      return addTableRow(current, section, row, note.path);
     });
   }
 
@@ -1025,7 +1043,8 @@ export class Vault {
   private async reachable(op: OperationName): Promise<Note[]> {
     this.mask.check(op);
     const { notes } = await this.load();
-    return this.mask.scope(op).everywhere ? notes : notes.filter((note) => this.mask.reaches(op, note.path));
+    const scoped = this.mask.scope(op).everywhere ? notes : notes.filter((note) => this.mask.reaches(op, note.path));
+    return BROWSING_READS.has(op) ? withoutTemplates(scoped, this.settings.templates?.folder) : scoped;
   }
 
   /** Resolve a reference among the notes `op` may see; a path outside them is refused by name, not reported missing. */
@@ -1246,6 +1265,55 @@ function pageOffset(value: number | undefined): number {
   return value;
 }
 
+/**
+ * Reads that browse the vault, as a reader or an agent does. The folder named by `[templates] folder` is not part of
+ * what they show: a template is a file with placeholders, not a note (ADR 0022). `get`, `property`, and every write
+ * still reach one by path.
+ */
+const BROWSING_READS: ReadonlySet<OperationName> = new Set([
+  "list",
+  "search",
+  "tags",
+  "nav",
+  "orphans",
+  "unresolved",
+  "suggest",
+]);
+
+/** The notes a browsing read shows: those outside the declared templates folder, when the vault names one. */
+function withoutTemplates(notes: Note[], folder: string | undefined): Note[] {
+  const prefix = folderPrefix(folder ?? "").toLowerCase();
+  return prefix === "" ? notes : notes.filter((note) => !note.path.toLowerCase().startsWith(prefix));
+}
+
+/** A sort value as text: `path`, `title`, or any frontmatter property; a list joins its items. */
+function sortValue(note: Note, key: string): string | undefined {
+  if (key === "path") return note.path;
+  if (key === "title") return note.title;
+  const value = note.frontmatter[key];
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+/** Two numbers compare as numbers, so 10 follows 9; anything else compares as text. */
+function compareSortValues(left: string, right: string): number {
+  const a = Number(left);
+  const b = Number(right);
+  if (left.trim() !== "" && right.trim() !== "" && Number.isFinite(a) && Number.isFinite(b)) return a - b;
+  return left.localeCompare(right, "en", { numeric: true });
+}
+
+function bySortKey(key: string, desc: boolean | undefined): (a: Note, b: Note) => number {
+  return (a, b) => {
+    const left = sortValue(a, key);
+    const right = sortValue(b, key);
+    // Notes without the value sort last in either direction, as a spreadsheet does.
+    if (left === undefined || right === undefined) return left === right ? 0 : left === undefined ? 1 : -1;
+    return (desc ? -1 : 1) * compareSortValues(left, right) || a.path.localeCompare(b.path);
+  };
+}
+
 function summarize(note: Note): NoteSummary {
   const { created, modified } = note.frontmatter;
   return {
@@ -1274,6 +1342,53 @@ function folderPrefix(folder: string): string {
     .replace(/^\.?\/+/, "")
     .replace(/\/+$/, "");
   return trimmed === "" ? "" : `${trimmed}/`;
+}
+
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR = /^\s*\|(?:[\s:|-]*\|)+\s*$/;
+
+/** A table row's cells, split on pipes that are not escaped; a leading and trailing pipe add none. */
+function tableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim());
+}
+
+/**
+ * Add `row` after the last row of the section's first table. A section without a table, or a row whose cell count
+ * disagrees with the header, is refused with nothing written.
+ */
+function addTableRow(text: string, section: Section, row: string, path: string): string {
+  const lines: { start: number; end: number; text: string }[] = [];
+  let offset = section.heading.bodyStart;
+  for (const raw of text.slice(section.heading.bodyStart, section.end).split(/(?<=\n)/)) {
+    const start = offset;
+    offset += raw.length;
+    lines.push({ start, end: offset, text: raw.replace(/\r?\n$/, "") });
+  }
+  const rows = lines.filter((line) => TABLE_ROW.test(line.text));
+  const header = rows[0];
+  const separator = rows[1];
+  if (!header || !separator || !TABLE_SEPARATOR.test(separator.text)) {
+    throw new WriteConflictError(`${path} section "${section.heading.text}" has no table; use section put`);
+  }
+  const wanted = tableCells(header.text).length;
+  const given = tableCells(row.trim()).length;
+  if (given !== wanted) {
+    throw new WriteConflictError(
+      `${path} table has ${wanted} column(s), so a row needs ${wanted} cell(s), not ${given}`,
+    );
+  }
+  let last = separator;
+  for (const line of rows.slice(2)) {
+    if (text.slice(last.end, line.start).trim() !== "") break;
+    last = line;
+  }
+  const lead = text[last.end - 1] === "\n" ? "" : "\n";
+  return splice(text, last.end, last.end, `${lead}${row.trim()}\n`);
 }
 
 /** The vault root's `.gitignore`, as ripgrep honors it; a vault without one ignores nothing. */

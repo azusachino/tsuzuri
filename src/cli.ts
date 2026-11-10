@@ -17,7 +17,6 @@ import {
   type OperationName,
   propertyValue,
   type SectionWriteOptions,
-  SORT_KEYS,
   TsuzuriError,
   Vault,
   type WriteOptions,
@@ -91,7 +90,11 @@ const OPTIONS = {
     value: "<key=value|key>",
     summary: "filter on any frontmatter property; may repeat; a bare key means present",
   },
-  sort: { type: "string", value: "<modified|created|title|path>", summary: "order; notes without the value sort last" },
+  sort: {
+    type: "string",
+    value: "<key>",
+    summary: "a frontmatter property, title or path; numbers sort as numbers",
+  },
   desc: { type: "boolean", summary: "sort descending" },
   limit: { type: "string", value: "<n>", summary: "most results" },
   offset: { type: "string", value: "<n>", summary: "skip this many results in the same order" },
@@ -318,10 +321,19 @@ const COMMANDS: readonly CommandSpec[] = [
     example: 'tsuzuri section put Home "Fresh text." --heading reading --dry-run',
   },
   {
+    name: "section row",
+    operation: "appendRow",
+    args: "<note> <row>",
+    summary: "add one row to the table in section --heading; the row needs as many cells as the header",
+    writes: true,
+    options: ["heading", ...WRITE],
+    example: 'tsuzuri section row Home "| 2026-10-16 | 3 |" --heading checks --dry-run',
+  },
+  {
     name: "prop set",
     operation: "setProperty",
-    args: "<note> <key> <value>",
-    summary: "set one frontmatter key, the value read as YAML, keeping comments and order",
+    args: "<note> <key> <value> [key=value ...]",
+    summary: "set frontmatter keys in one write, values read as YAML, keeping comments and order",
     writes: true,
     options: WRITE,
     example: 'tsuzuri prop set "Cognitive load" rating 4 --dry-run',
@@ -899,12 +911,10 @@ async function main(): Promise<void> {
     }
     case "list": {
       const sort = opts.sort;
-      if (sort !== undefined && !(SORT_KEYS as readonly string[]).includes(sort)) {
-        throw new UsageError(`--sort takes ${SORT_KEYS.join(", ")}`);
-      }
+      if (sort !== undefined && sort.trim() === "") throw new UsageError("--sort needs a property name");
       const notes = await vault.list({
         ...filter,
-        sort: sort as (typeof SORT_KEYS)[number] | undefined,
+        sort,
         desc: opts.desc,
         limit: count("limit", opts.limit),
         offset: offset(opts.offset),
@@ -951,14 +961,26 @@ async function main(): Promise<void> {
       );
     }
     case "prop": {
-      const [action, ref, key, ...rest] = args;
-      if (action === "set" && ref && key && rest.length > 0) {
-        return emitWrite(await vault.setProperty(ref, key, propertyValue(rest.join(" ")), writeOptions()));
+      const [action, ref, ...rest] = args;
+      if (action === "set" && ref && rest.length > 0) {
+        // `key=value` pairs set several properties in one guarded write; `key value` stays for one.
+        if (rest[0]?.includes("=")) {
+          const values: Record<string, unknown> = {};
+          for (const pair of rest) {
+            const at = pair.indexOf("=");
+            if (at <= 0) throw new UsageError(`"${pair}" is not a key=value pair`);
+            values[pair.slice(0, at)] = propertyValue(pair.slice(at + 1));
+          }
+          return emitWrite(await vault.setProperties(ref, values, writeOptions()));
+        }
+        const [key, ...words] = rest;
+        if (words.length === 0) throw new UsageError(`prop set ${ref} ${key ?? ""} needs a value`.trim());
+        return emitWrite(await vault.setProperty(ref, key as string, propertyValue(words.join(" ")), writeOptions()));
       }
-      if (action !== "get" || !ref || !key || rest.length > 0) {
-        throw new UsageError("usage: prop get <note> <key>, or prop set <note> <key> <value>");
+      if (action !== "get" || !ref || rest.length !== 1) {
+        throw new UsageError("usage: prop get <note> <key>, or prop set <note> <key> <value> | <key=value> ...");
       }
-      const value = await vault.property(ref, key);
+      const value = await vault.property(ref, rest[0] as string);
       return emit(value, () => (typeof value === "string" ? value : JSON.stringify(value)));
     }
     case "delete": {
@@ -997,8 +1019,12 @@ async function main(): Promise<void> {
     }
     case "section": {
       const [action, ref, ...words] = args;
-      if (action !== "put" || !ref || !opts.heading)
-        throw new UsageError("usage: section put <note> --heading H [text]");
+      if (action === "row" && ref && opts.heading) {
+        return emitWrite(await vault.appendRow(ref, opts.heading, await inputText(words), writeOptions()));
+      }
+      if (action !== "put" || !ref || !opts.heading) {
+        throw new UsageError("usage: section put <note> --heading H [text], or section row <note> --heading H <row>");
+      }
       return emitWrite(await vault.putSection(ref, opts.heading, await inputText(words), sectionOptions()));
     }
     case "new": {

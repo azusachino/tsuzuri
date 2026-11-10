@@ -132,3 +132,32 @@ describe("put", () => {
     expect(existsSync(join(root, "Notes", "Dry.md"))).toBe(false);
   });
 });
+
+describe("setProperties", () => {
+  test("sets several keys in one write, under one hash check", async () => {
+    const { vault, read } = vaultWith("Multi.md", COMMENTED);
+    const result = await vault.setProperties("Multi", { level: 3, checked: "2026-10-16" }, { ifHash: undefined });
+    expect(result.written).toBe(true);
+    expect(read()).toContain("level: 3\nchecked: 2026-10-16\n---");
+    expect(await vault.property("Multi", "level")).toBe(3);
+  });
+
+  test("refuses a stale hash without writing any key", async () => {
+    const { vault, read } = vaultWith("Stale.md", COMMENTED);
+    const held = (await vault.get("Stale")).hash;
+    await vault.setProperty("Stale", "zeta", 9);
+    const before = read();
+    await expect(vault.setProperties("Stale", { level: 1, checked: "2026-01-01" }, { ifHash: held })).rejects.toThrow(
+      WriteConflictError,
+    );
+    expect(read()).toBe(before);
+  });
+
+  test("takes key=value pairs on the CLI", () => {
+    const { root, read } = vaultWith("Pairs.md", COMMENTED);
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    expect(run("prop", "set", "Pairs", "level=3", "checked=2026-10-16").status).toBe(0);
+    expect(read()).toContain("level: 3\nchecked: 2026-10-16");
+    expect(run("prop", "set", "Pairs", "level=3", "bogus").status).toBe(2);
+  });
+});

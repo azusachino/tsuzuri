@@ -156,6 +156,8 @@ tsuzuri find cogload --json
 
 Notes matching the filters, optionally sorted.
 
+`--sort` takes any frontmatter property as well as `modified`, `created`, `title` and `path`, so a vault with its own progress field sorts by it: `tsuzuri list --type skill --sort checked` puts the stalest check first.
+
 | Option | Meaning |
 | --- | --- |
 | `--type <type>` | only notes whose type property is this |
@@ -163,7 +165,7 @@ Notes matching the filters, optionally sorted.
 | `--status <status>` | only notes whose status property is this |
 | `--under <folder>` | only notes in this folder |
 | `--where <key=value\|key>` | filter on any frontmatter property; may repeat; a bare key means present |
-| `--sort <modified\|created\|title\|path>` | order; notes without the value sort last |
+| `--sort <key>` | a frontmatter property, `title` or `path`; numbers sort as numbers, list properties join their items, and notes without the value sort last |
 | `--desc` | sort descending |
 | `--limit <n>` | most results |
 | `--offset <n>` | skip this many results in the same order |
@@ -402,11 +404,29 @@ With `--json`: a write result, as `append`.
 tsuzuri section put Home "Fresh text." --heading reading --dry-run
 ```
 
+### section row
+
+`tsuzuri section row <note> <row>`
+
+Add one row after the last row of the table in section --heading. The row needs as many cells as the header; a section without a table, or a row of a different width, is refused with nothing written.
+
+| Option | Meaning |
+| --- | --- |
+| `--heading <heading>` | the section holding the table |
+| `--dry-run` | show the result, a diff for edits, without writing |
+| `--if-hash <sha256>` | refuse unless the note still has the hash get returned |
+
+With `--json`: a write result, as `append`.
+
+```sh
+tsuzuri section row "Financial theory" "| 2026-10-16 | 4 |" --heading checks --dry-run
+```
+
 ### prop set
 
-`tsuzuri prop set <note> <key> <value>`
+`tsuzuri prop set <note> <key> <value> [key=value ...]`
 
-Set one frontmatter key, the value read as YAML, keeping comments and order.
+Set frontmatter keys, the values read as YAML, keeping comments and order. `key=value` pairs set several in one write, under one hash check, all or nothing.
 
 | Option | Meaning |
 | --- | --- |
@@ -416,6 +436,7 @@ Set one frontmatter key, the value read as YAML, keeping comments and order.
 With `--json`: a write result, as `append`.
 
 ```sh
+tsuzuri prop set "Cognitive load" rating=4 checked=2026-10-16 --dry-run
 tsuzuri prop set "Cognitive load" rating 4 --dry-run
 ```
 

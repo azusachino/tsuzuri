@@ -19,9 +19,11 @@ tsuzuri's architecture decision records. Each one says what was decided, what it
 | [0013](0013-node-first-toolchain.md) | Node first, Bun as a fast path | accepted |
 | [0014](0014-note-types-from-templates.md) | Note types from templates, and a smaller tsuzuri.toml | accepted |
 | [0015](0015-any-markdown-folder.md) | Any Markdown folder, Obsidian first | accepted |
-| [0016](0016-the-sdk-reads-and-writes-the-whole-vault.md) | The SDK reads and writes the whole vault; policy belongs to the host | accepted; permission layer amended by 0018 |
+| [0016](0016-the-sdk-reads-and-writes-the-whole-vault.md) | The SDK reads and writes the whole vault; policy belongs to the host | accepted; permission layer amended by 0018, browsing reads by 0022 |
 | [0017](0017-no-journal-in-the-sdk.md) | No journal in the SDK | accepted; journals move to an opt-in bundled extension by 0019 and 0020 |
 | [0018](0018-operations-and-a-permission-mask.md) | Operations, and a permission mask the host sets | accepted; opened to extensions by 0019, scoped paths amended by 0021 |
 | [0019](0019-a-small-core-and-vault-extensions.md) | A small core, and extensions a vault defines | accepted; bundled extensions added by 0020, scopes amended by 0021 |
 | [0020](0020-bundled-extensions-journal-first.md) | Bundled extensions, the journal first | accepted |
 | [0021](0021-scope-derived-paths-and-extension-operations.md) | Scope derived paths and extension operations honestly | accepted |
+| [0022](0022-reads-skip-the-declared-templates-folder.md) | Reads skip the declared templates folder | accepted |
+| [0023](0023-a-table-row-is-added-in-place.md) | A table row is added in place | accepted |

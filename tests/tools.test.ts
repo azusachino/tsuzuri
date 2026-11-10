@@ -107,7 +107,8 @@ describe("validateInput", () => {
     expect(() => validateInput(tool("tsuzuri_get"), {})).toThrow("tsuzuri_get needs note");
     expect(() => validateInput(tool("tsuzuri_get"), { note: "x", bogus: 1 })).toThrow("has no input bogus");
     expect(() => validateInput(tool("tsuzuri_search"), { query: "x", limit: 0 })).toThrow(ToolInputError);
-    expect(() => validateInput(tool("tsuzuri_list"), { sort: "size" })).toThrow("must be one of");
+    expect(validateInput(tool("tsuzuri_list"), { sort: "level" })).toBeDefined();
+    expect(() => validateInput(tool("tsuzuri_list"), { sort: 3 })).toThrow("must be string");
     expect(() => validateInput(tool("tsuzuri_capture"), { text: "x", tags: ["a", 2] })).toThrow("must be array");
     expect(() => validateInput(tool("tsuzuri_get"), "note")).toThrow("takes an object");
     expect(() => validateInput(tool("tsuzuri_list"), { where: { status: 3 } })).toThrow(

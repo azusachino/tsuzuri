@@ -131,3 +131,60 @@ describe("guards", () => {
     expect(run(["section", "put", "Weekly/2026-W38.md", "x"]).status).toBe(2);
   });
 });
+
+const TABLE = [
+  "---",
+  "title: Table",
+  "---",
+  "",
+  "# Table",
+  "",
+  "## checks",
+  "",
+  "| date | level |",
+  "| --- | --- |",
+  "| 2026-10-01 | 1 |",
+  "",
+  "## after",
+  "",
+  "Text.",
+  "",
+].join("\n");
+
+function tableVault(): { vault: Vault; read: () => string } {
+  const root = copyVault();
+  writeFileSync(join(root, "Table.md"), TABLE);
+  return { vault: new Vault(root), read: () => readFileSync(join(root, "Table.md"), "utf8") };
+}
+
+describe("section row", () => {
+  test("adds a row after the last row, keeping the earlier ones", async () => {
+    const { vault, read } = tableVault();
+    await vault.appendRow("Table", "checks", "| 2026-10-16 | 4 |");
+    expect(read()).toContain("| 2026-10-01 | 1 |\n| 2026-10-16 | 4 |\n\n## after");
+  });
+
+  test("refuses a row whose cell count disagrees with the header", async () => {
+    const { vault, read } = tableVault();
+    const before = read();
+    await expect(vault.appendRow("Table", "checks", "| 2026-10-16 |")).rejects.toThrow(WriteConflictError);
+    expect(read()).toBe(before);
+  });
+
+  test("refuses a section with no table", async () => {
+    const { vault, read } = tableVault();
+    const before = read();
+    await expect(vault.appendRow("Table", "after", "| a | b |")).rejects.toThrow(WriteConflictError);
+    expect(read()).toBe(before);
+  });
+
+  test("is a CLI command with --heading, a hash guard, and usage errors", () => {
+    const root = copyVault();
+    writeFileSync(join(root, "Row.md"), TABLE);
+    const run = (...args: string[]) => spawnSync("node", [CLI, "--vault", root, ...args], { encoding: "utf8" });
+    expect(run("section", "row", "Row", "| 2026-10-16 | 4 |", "--heading", "checks").status).toBe(0);
+    expect(readFileSync(join(root, "Row.md"), "utf8")).toContain("| 2026-10-01 | 1 |\n| 2026-10-16 | 4 |");
+    expect(run("section", "row", "Row", "| only |", "--heading", "checks").status).toBe(1);
+    expect(run("section", "row", "Row", "| a | b |").status).toBe(2);
+  });
+});

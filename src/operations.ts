@@ -40,6 +40,8 @@ export const OPERATIONS = {
   append: "edit",
   putSection: "edit",
   setProperty: "edit",
+  setProperties: "edit",
+  appendRow: "edit",
   put: "edit",
 } as const satisfies Record<string, OperationKind>;
 

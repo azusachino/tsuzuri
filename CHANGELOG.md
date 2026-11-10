@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Reads skip the declared templates folder.** `list`, `search`, `tags`, `nav`, `orphans`, `unresolved`, and `suggest` leave out the folder `[templates] folder` names, so a template no longer appears as a note with placeholder values. `notes`, `get`, `property`, and `grep` still reach one, and a vault without the setting is unchanged. ([#126](https://github.com/azusachino/tsuzuri/issues/126), [ADR 0022](docs/decisions/0022-reads-skip-the-declared-templates-folder.md))
+- **Several properties in one guarded write.** `prop set <note> key=value [key=value ...]` sets them in one write under one hash check, all or nothing; `Vault.setProperties` is the method, an `edit` operation. The single `key value` form is unchanged. ([#127](https://github.com/azusachino/tsuzuri/issues/127))
+- **A table row is added in place.** `section row <note> <row> --heading <heading>` inserts one row after the last row of the section's table, refusing a row whose cell count disagrees with the header and a section that has no table, with nothing written. ([#128](https://github.com/azusachino/tsuzuri/issues/128), [ADR 0023](docs/decisions/0023-a-table-row-is-added-in-place.md))
+- **Sort on any property.** `list --sort` takes a frontmatter property as well as `modified`, `created`, `title` and `path`; numbers compare as numbers so a level 10 follows 9, a list property joins its items, and notes without the value stay last in either direction. The SDK's `ListOptions.sort` is a string, `SORT_KEYS` still names the four summary keys, and `tsuzuri_list`'s `sort` no longer carries an `enum`. ([#125](https://github.com/azusachino/tsuzuri/issues/125))
+
 ## 0.8.0
 
 - **Product guide.** The README starts with a quick start and links to the full [configuration reference](docs/configuration.md); use cases now cover plain Markdown folders, large agent sessions, `init`, and `check`. ([#98](https://github.com/azusachino/tsuzuri/issues/98))

@@ -114,6 +114,29 @@ Run `init --dry-run` to see a starter `tsuzuri.toml` and `templates/capture.md`,
 - `self-description.test › init refuses a pre-existing template before writing the config`
 - `self-description.test › types and config describe effective routes and provenance`
 
+### T13. Work a queue ordered by the vault's own property
+
+A vault that records progress in its own frontmatter asks "which is stalest": `list --type skill --sort checked`. Any property sorts, numbers compare as numbers so a level 10 follows 9, a list property joins its items, and notes without the value come last in either direction. Before this, the queue needed `list --json | jq 'sort_by(.checked)'`.
+
+- `list.test › sort by any frontmatter property, numbers as numbers`
+- `list.test › are flags on the CLI`
+
+### T14. Record progress on one note without a rewrite
+
+A level and the date of the check that earned it belong together: `prop set <note> level=4 checked=2026-10-16` sets both in one write under one `--if-hash`, all or nothing. A check row is added in place with `section row <note> "| … |" --heading checks`, which refuses a row whose width disagrees with the header instead of dropping earlier rows.
+
+- `props-put.test › setProperties › sets several keys in one write, under one hash check`
+- `props-put.test › setProperties › refuses a stale hash without writing any key`
+- `sections.test › section row › adds a row after the last row, keeping the earlier ones`
+- `sections.test › section row › refuses a row whose cell count disagrees with the header`
+
+### T15. Keep templates out of what a reader sees
+
+A vault that sets `[templates] folder` does not see its templates in `list`, `search`, `tags`, `nav`, `orphans`, `unresolved`, or `suggest`; `get` by path still reaches one, and `notes` still enumerates every file. A vault without the setting is unchanged.
+
+- `reads.test › the declared templates folder › is left out of the browsing reads, while get and notes still reach it`
+- `reads.test › the declared templates folder › shows as ordinary notes when the vault declares no templates folder`
+
 ## from an agent
 
 An agent reaches tsuzuri in one of two ways: a coding agent shells out to the CLI with `--json`, and a bot imports the SDK in-process. Both see the same operations, and every case below is written for a model that has never seen the vault.

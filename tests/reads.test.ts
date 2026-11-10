@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NotFoundError, Vault } from "tsuzuri";
 import { describe, expect, test } from "vitest";
-import { FIXTURE } from "./git.ts";
+import { copyVault, FIXTURE } from "./git.ts";
 
 const vault = new Vault(FIXTURE);
 const CLI = join(import.meta.dirname, "..", "src", "cli.ts");
@@ -96,9 +96,43 @@ describe("prop get", () => {
   });
 
   test("prints text or JSON, and exits 1 for a missing property and 2 for bad usage", () => {
-    expect(run(FIXTURE, "prop", "get", "People/Plato.md", "type").stdout).toBe("person\n");
-    expect(JSON.parse(run(FIXTURE, "prop", "get", "clt", "aliases", "--json").stdout)).toEqual(["CLT"]);
-    expect(run(FIXTURE, "prop", "get", "clt", "nope").status).toBe(1);
-    expect(run(FIXTURE, "prop", "set", "clt", "x").status).toBe(2);
+    // A copy, so a write that bad usage should have refused cannot edit the shared fixture.
+    const root = copyVault();
+    expect(run(root, "prop", "get", "People/Plato.md", "type").stdout).toBe("person\n");
+    expect(JSON.parse(run(root, "prop", "get", "clt", "aliases", "--json").stdout)).toEqual(["CLT"]);
+    expect(run(root, "prop", "get", "clt", "nope").status).toBe(1);
+    expect(run(root, "prop", "set", "clt", "x").status).toBe(2);
+    expect(readFileSync(join(root, "Topics", "Cognitive load.md"), "utf8")).toBe(
+      readFileSync(join(FIXTURE, "Topics", "Cognitive load.md"), "utf8"),
+    );
+  });
+});
+
+describe("the declared templates folder", () => {
+  test("is left out of the browsing reads, while get and notes still reach it", async () => {
+    const paths = (notes: { path: string }[]) => notes.map((note) => note.path);
+    expect(paths(await vault.list({}))).not.toContain("Templates/Book.md");
+    expect((await vault.tags()).map((tag) => tag.tag)).not.toContain("reading");
+    expect((await vault.nav()).folders.map((folder) => folder.path)).not.toContain("Templates");
+    expect(paths(await vault.orphans())).not.toContain("Templates/Book.md");
+    expect((await vault.search("Started")).map((hit) => hit.path)).not.toContain("Templates/Book.md");
+    // The primitive enumerates every file, and an explicit read still reaches one.
+    expect(paths(await vault.notes())).toContain("Templates/Book.md");
+    expect((await vault.get("Templates/Book.md")).path).toBe("Templates/Book.md");
+  });
+
+  test("shows as ordinary notes when the vault declares no templates folder", async () => {
+    const root = copyVault();
+    try {
+      const config = readFileSync(join(root, "tsuzuri.toml"), "utf8").replace(
+        '[templates]\nfolder = "Templates"\n',
+        "",
+      );
+      writeFileSync(join(root, "tsuzuri.toml"), config);
+      const plain = new Vault(root);
+      expect((await plain.list({})).map((note) => note.path)).toContain("Templates/Book.md");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
