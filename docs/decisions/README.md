@@ -16,7 +16,7 @@ tsuzuri's architecture decision records. Each one says what was decided, what it
 | [0010](0010-agent-tools-as-an-extension-package.md) | Agent tools as an extension package | accepted; separate package superseded by 0012, exposure by 0016 |
 | [0011](0011-settings-from-neiro-toml-only.md) | Settings from `tsuzuri.toml` only | accepted; capture keys superseded by 0014, journal paths by 0017 |
 | [0012](0012-one-npm-package-named-tsuzuri.md) | One npm package, named tsuzuri | accepted |
-| [0013](0013-node-first-toolchain.md) | Node first, Bun as a fast path | accepted |
+| [0013](0013-node-first-toolchain.md) | Node first, Bun as a fast path | accepted; tested versions extended by 0024 |
 | [0014](0014-note-types-from-templates.md) | Note types from templates, and a smaller tsuzuri.toml | accepted |
 | [0015](0015-any-markdown-folder.md) | Any Markdown folder, Obsidian first | accepted |
 | [0016](0016-the-sdk-reads-and-writes-the-whole-vault.md) | The SDK reads and writes the whole vault; policy belongs to the host | accepted; permission layer amended by 0018, browsing reads by 0022 |
@@ -27,3 +27,4 @@ tsuzuri's architecture decision records. Each one says what was decided, what it
 | [0021](0021-scope-derived-paths-and-extension-operations.md) | Scope derived paths and extension operations honestly | accepted |
 | [0022](0022-reads-skip-the-declared-templates-folder.md) | Reads skip the declared templates folder | accepted |
 | [0023](0023-a-table-row-is-added-in-place.md) | A table row is added in place | accepted |
+| [0024](0024-node-26-joins-the-tested-toolchain.md) | Node 26 joins the tested toolchain | accepted |
