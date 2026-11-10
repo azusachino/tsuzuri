@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Node 26 is tested.** `make validate` runs on Node 22, 24 and 26, and the development toolchain pins Node 26 to a minor so a missing patch cannot silently disable the pin. `engines` stays `node >= 22`. ([ADR 0024](docs/decisions/0024-node-26-joins-the-tested-toolchain.md))
+
 ## 0.9.0
 
 - **Reads skip the declared templates folder.** `list`, `search`, `tags`, `nav`, `orphans`, `unresolved`, and `suggest` leave out the folder `[templates] folder` names, so a template no longer appears as a note with placeholder values. `notes`, `get`, `property`, and `grep` still reach one, and a vault without the setting is unchanged. ([#126](https://github.com/azusachino/tsuzuri/issues/126), [ADR 0022](docs/decisions/0022-reads-skip-the-declared-templates-folder.md))
