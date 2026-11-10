@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Node 26 is tested.** `make validate` runs on Node 22, 24 and 26, and the development toolchain pins Node 26 to a minor so a missing patch cannot silently disable the pin. `engines` stays `node >= 22`. ([#130](https://github.com/azusachino/tsuzuri/issues/130), [ADR 0024](docs/decisions/0024-node-26-joins-the-tested-toolchain.md))
+- **Node 26 is tested.** `make validate` runs on Node 22, 24 and 26, and the development toolchain pins Node 26 to a minor so a missing patch cannot silently disable the pin. `engines` stays `node >= 22`. The same file declares `ripgrep`, because the grep parity suite skips itself when `rg` is absent. ([#130](https://github.com/azusachino/tsuzuri/issues/130), [ADR 0024](docs/decisions/0024-node-26-joins-the-tested-toolchain.md))
 
 ## 0.9.0
 
