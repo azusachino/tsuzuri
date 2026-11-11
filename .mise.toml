@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4"
-typos = "1"
+typos = "1.52"
 # The grep parity test compares tsuzuri with ripgrep, and skips itself when ripgrep is
 # missing, so the dependency is declared rather than inherited from the machine.
 ripgrep = "15"
