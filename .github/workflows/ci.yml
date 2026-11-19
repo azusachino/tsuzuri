@@ -24,7 +24,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -51,13 +51,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           install: true
           install_args: rumdl typos
           cache: true
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
@@ -79,7 +79,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           install: true
           install_args: bun node
@@ -100,7 +100,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           install: true
           install_args: rumdl typos
