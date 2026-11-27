@@ -1,17 +1,19 @@
 name: CI
 
+# Pull requests and manual runs only: a merge to main re-ran the check its pull
+# request had just passed.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Cancel superseded pull request runs only; a ref-wide group also cancelled main.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -24,7 +26,9 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v7
+      # A manual run has no base to compare, so it runs every gate.
       - uses: dorny/paths-filter@v4
+        if: github.event_name == 'pull_request'
         id: filter
         with:
           filters: |
@@ -44,9 +48,11 @@ jobs:
     needs: [changes]
     if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
-        node: [22, 24, 26]
+        # The oldest and newest supported Node lines.
+        node: [22, 26]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -60,6 +66,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
 
       - name: Verify Bun is absent
         run: '! command -v bun'
@@ -75,6 +82,7 @@ jobs:
     needs: [changes]
     if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -96,6 +104,7 @@ jobs:
     needs: [changes]
     if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7

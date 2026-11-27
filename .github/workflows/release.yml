@@ -36,7 +36,7 @@ jobs:
       # later, which the Node that .mise.toml pins already bundles.
       - uses: actions/setup-node@v7
         with:
-          node-version: "24.19.0"
+          node-version: "26"
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
